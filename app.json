@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "ComandPOS Delivery",
+    "slug": "comandpos-delivery",
+    "scheme": "comandposdelivery",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#F97316"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.comandpos.delivery",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Usamos tu ubicación para calcular la ruta y el origen de tus entregas.",
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "config": { "googleMapsApiKey": "REEMPLAZAR_CON_GOOGLE_MAPS_KEY" }
+    },
+    "android": {
+      "package": "com.comandpos.delivery",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F97316"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "config": { "googleMaps": { "apiKey": "REEMPLAZAR_CON_GOOGLE_MAPS_KEY" } }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-location",
+      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "backgroundColor": "#F97316"
+        }
+      ],
+      [
+        "expo-build-properties",
+        { "android": { "compileSdkVersion": 35, "targetSdkVersion": 35 } }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": { "projectId": "REEMPLAZAR_CON_EAS_PROJECT_ID" }
+    }
+  }
+}
