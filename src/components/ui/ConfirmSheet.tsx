@@ -3,12 +3,14 @@
  * Alert nativo. Soporta un monto destacado (ej. efectivo a cobrar) y tonos
  * semánticos (success / danger / primary).
  */
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { SlideInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { SlideInDown, SlideOutDown, FadeIn, FadeOut, Easing } from 'react-native-reanimated';
 import { Press } from './Press';
 import { palette, shadow } from '@theme/colors';
+
+const EXIT_MS = 220; // debe coincidir con la duración del exiting de la hoja
 
 const c = palette.dark;
 
@@ -39,14 +41,31 @@ export function ConfirmSheet({
   const insets = useSafeAreaInsets();
   const t = TONES[tone];
 
-  return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.fill}>
-        <Animated.View entering={FadeIn.duration(180)} style={StyleSheet.absoluteFill}>
-          <Pressable style={styles.backdrop} onPress={onClose} />
-        </Animated.View>
+  // Mantiene el Modal montado durante la animación de salida (si no, se corta de golpe).
+  const [mounted, setMounted] = useState(visible);
+  useEffect(() => {
+    if (visible) { setMounted(true); return; }
+    const id = setTimeout(() => setMounted(false), EXIT_MS);
+    return () => clearTimeout(id);
+  }, [visible]);
 
-        <Animated.View entering={SlideInDown.springify().damping(20).stiffness(220)} style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+  if (!mounted) return null;
+
+  return (
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+      <View style={styles.fill}>
+        {visible && (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(EXIT_MS)} style={StyleSheet.absoluteFill}>
+            <Pressable style={styles.backdrop} onPress={onClose} />
+          </Animated.View>
+        )}
+
+        {visible && (
+        <Animated.View
+          entering={SlideInDown.duration(360).easing(Easing.out(Easing.cubic))}
+          exiting={SlideOutDown.duration(EXIT_MS).easing(Easing.in(Easing.cubic))}
+          style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
+        >
           <View style={styles.handle} />
 
           {!!icon && <View style={[styles.iconBubble, { backgroundColor: t.tint }]}>{icon}</View>}
@@ -70,6 +89,7 @@ export function ConfirmSheet({
             </Press>
           </View>
         </Animated.View>
+        )}
       </View>
     </Modal>
   );

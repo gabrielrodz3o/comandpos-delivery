@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import { api } from './apiClient';
 import type { MyOrdersResponse } from '@types/delivery';
 
@@ -27,24 +28,24 @@ export const optimizeRoute = (
 ) => api.post('/api/restaurant/delivery/route/optimize', { route_id: routeId, stops, ...totals }).then((r) => r.data);
 
 /** Cambiar estado de una orden (ej. 5→6 En camino). */
-export const changeStatus = (accountId: number, statusId: number) =>
+export const changeStatus = (accountId: number, statusId: number, cfg?: AxiosRequestConfig) =>
   api
     .post('/api/restaurant/tables/update-account-status', {
       account_id: accountId,
       status_tracker_id: statusId,
-    })
+    }, cfg)
     .then((r) => r.data);
 
 /** Marcar entregada (status 7). */
-export const markDelivered = (accountId: number, locationId: number, userId: number) =>
+export const markDelivered = (accountId: number, locationId: number, userId: number, cfg?: AxiosRequestConfig) =>
   api
     .post('/api/restaurant/order/mark-delivery-completed', {
       account_id: accountId,
       location_id: locationId,
       user_id: userId,
-    })
+    }, cfg)
     .then((r) => r.data);
 
 /** Disponibilidad del rider (recibir / no recibir nuevos pedidos). */
-export const setAvailability = (accepting: boolean) =>
-  api.post('/api/restaurant/delivery/availability', { accepting }).then((r) => r.data);
+export const setAvailability = (accepting: boolean, cfg?: AxiosRequestConfig) =>
+  api.post('/api/restaurant/delivery/availability', { accepting }, cfg).then((r) => r.data);

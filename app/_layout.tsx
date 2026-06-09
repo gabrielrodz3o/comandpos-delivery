@@ -3,23 +3,18 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, useRouter } from 'expo-router';
-import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
 import { useAuthStore } from '@store/useAuthStore';
 import { ToastHost } from '@components/ui/ToastHost';
+import { SyncBanner } from '@components/ui/SyncBanner';
 import { registerForPushNotifications } from '@services/notifications';
 import { connectRiderSocket, disconnectRiderSocket } from '@services/socket';
+import { queryClient, persister } from '@services/queryClient';
+import { startSyncManager } from '@services/sync';
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false } },
-});
-const persister = createAsyncStoragePersister({ storage: AsyncStorage });
-
-/** Efectos de sesión: push + socket cuando hay token. NO navega (salvo tap de push). */
+/** Efectos de sesión: push + socket + cola offline cuando hay token. */
 function SessionEffects() {
   const router = useRouter();
   const token = useAuthStore((s) => s.token);
@@ -28,6 +23,7 @@ function SessionEffects() {
     if (!token) return;
     registerForPushNotifications();
     connectRiderSocket();
+    const stopSync = startSyncManager();
     const sub = Notifications.addNotificationResponseReceivedListener(() => {
       // Tap en la notificación → ir a Mis órdenes (seguro: post-mount, acción del usuario).
       router.replace('/(tabs)/orders');
@@ -35,6 +31,7 @@ function SessionEffects() {
     return () => {
       sub.remove();
       disconnectRiderSocket();
+      stopSync();
     };
   }, [token]);
 
@@ -50,10 +47,12 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)" />
+            <Stack.Screen name="select-location" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="order/[id]" options={{ presentation: 'card' }} />
           </Stack>
           <SessionEffects />
+          <SyncBanner />
           <ToastHost />
         </PersistQueryClientProvider>
       </SafeAreaProvider>

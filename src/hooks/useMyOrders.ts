@@ -3,9 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { getMyOrders } from '@services/delivery';
 import { onRiderUpdate, connectRiderSocket } from '@services/socket';
+import { flushQueue } from '@services/sync';
+import { useSyncQueue } from '@store/useSyncQueue';
 import type { DeliveryOrder } from '@types/delivery';
 
-export const MY_ORDERS_KEY = ['my-orders'];
+export { MY_ORDERS_KEY } from '@services/queryClient';
+import { MY_ORDERS_KEY } from '@services/queryClient';
 
 export function useMyOrders() {
   const qc = useQueryClient();
@@ -15,6 +18,13 @@ export function useMyOrders() {
     queryFn: async () => (await getMyOrders(48)),
     refetchInterval: 120_000, // fallback lento; el socket es el primario
   });
+
+  // Un fetch exitoso = hay señal → marcamos online y vaciamos la cola pendiente.
+  useEffect(() => {
+    if (!query.isSuccess) return;
+    useSyncQueue.getState().setOnline(true);
+    flushQueue();
+  }, [query.isSuccess, query.dataUpdatedAt]);
 
   // Realtime: cada rider_order_update refresca + vibra.
   useEffect(() => {

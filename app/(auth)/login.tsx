@@ -10,8 +10,8 @@ import Svg, { Path, Circle, Line } from 'react-native-svg';
 import { login } from '@services/auth';
 import { useAuthStore } from '@store/useAuthStore';
 import { showToast } from '@store/useToastStore';
+import { accessibleLocations } from '@utils/locations';
 import { palette, shadow } from '@theme/colors';
-import type { AuthUser } from '@types/business';
 
 const c = palette.dark;
 
@@ -126,11 +126,6 @@ const Field = memo(function Field({ label, marginTop, icon, secureToggle, fieldR
   );
 });
 
-const firstLocationId = (user: AuthUser): number | null => {
-  if (Array.isArray(user.acess_locations) && user.acess_locations.length) return Number(user.acess_locations[0]);
-  return user.business_units_with_access?.[0]?.locations?.[0]?.id ?? null;
-};
-
 export default function LoginScreen() {
   const router = useRouter();
   const { setAuth, setLocationId } = useAuthStore();
@@ -154,8 +149,14 @@ export default function LoginScreen() {
     try {
       const res = await login({ username, password });
       setAuth(res.token, res.user);
-      setLocationId(firstLocationId(res.user));
-      router.replace('/(tabs)/orders');
+      // 1 sucursal → la tomamos por defecto y entramos. >1 → elegir sucursal.
+      const locs = accessibleLocations(res.user);
+      if (locs.length <= 1) {
+        setLocationId(locs[0]?.id ?? null);
+        router.replace('/(tabs)/orders');
+      } else {
+        router.replace('/select-location');
+      }
     } catch {
       /* interceptor */
     } finally {

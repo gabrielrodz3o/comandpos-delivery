@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Linking, ActivityIndicator, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
@@ -7,7 +7,10 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMyOrders, MY_ORDERS_KEY } from '@hooks/useMyOrders';
-import { groupMine, optimizeRoute, changeStatus } from '@services/delivery';
+import { useBusinessConfig } from '@hooks/useBusinessConfig';
+import { fetchDrivingRoute } from '@services/directions';
+import { groupMine, optimizeRoute } from '@services/delivery';
+import { queueChangeStatus } from '@services/sync';
 import { showToast } from '@store/useToastStore';
 import { Press } from '@components/ui/Press';
 import { IcRoute, IcNavigation, IcMapPin, IcWallet, IcChevronRight, IcX, IcBike, IcCheck } from '@components/ui/icons';
@@ -60,7 +63,9 @@ export default function MapScreen() {
   const qc = useQueryClient();
   const mapRef = useRef<MapView>(null);
   const { active, activeRouteId, tripStarted } = useMyOrders();
+  const { googleMapsApiKey } = useBusinessConfig();
   const [me, setMe] = useState<LL | null>(null);
+  const [roadCoords, setRoadCoords] = useState<{ latitude: number; longitude: number }[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [localOrder, setLocalOrder] = useState<number[] | null>(null); // orden optimizado optimista
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -94,6 +99,24 @@ export default function MapScreen() {
       setMe({ lat: pos.coords.latitude, lng: pos.coords.longitude });
     })();
   }, []);
+
+  // Ruta por calles (Google Directions) con la key de la unidad de negocio.
+  // Sin key / offline / error → roadCoords=null y el mapa cae al trazo recto.
+  useEffect(() => {
+    let cancelled = false;
+    const pts = stops
+      .filter((o) => o.delivery_lat != null && o.delivery_lng != null)
+      .map((o) => ({ latitude: Number(o.delivery_lat), longitude: Number(o.delivery_lng) }));
+    if (!googleMapsApiKey || pts.length < 1) { setRoadCoords(null); return; }
+    const origin = me ? { latitude: me.lat, longitude: me.lng } : pts[0];
+    const dests = me ? pts : pts.slice(1);
+    if (dests.length < 1) { setRoadCoords(null); return; }
+    fetchDrivingRoute(googleMapsApiKey, origin, dests).then((r) => {
+      if (!cancelled) setRoadCoords(r?.coordinates ?? null);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleMapsApiKey, me?.lat, me?.lng, stops.map((s) => s.id).join(',')]);
 
   const fitAll = () => {
     const pts = stops.map((o) => ({ latitude: Number(o.delivery_lat), longitude: Number(o.delivery_lng) }));
@@ -157,23 +180,20 @@ export default function MapScreen() {
     }
   };
 
-  /** Marca una parada como "En camino" (salgo hacia esa entrega). */
-  const onEnCamino = async (orderId: number) => {
+  /** Marca una parada como "En camino" (salgo hacia esa entrega). Optimista + offline-safe. */
+  const onEnCamino = async (order: DeliveryOrder) => {
     try {
-      await changeStatus(orderId, 6);
+      const res = await queueChangeStatus(order, 6);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast({ message: '🛵 En camino a la entrega', variant: 'success' });
-      qc.invalidateQueries({ queryKey: MY_ORDERS_KEY });
-    } catch {
-      showToast({ message: 'No se pudo actualizar el estado', variant: 'error' });
-    }
+      if (!res.queued) showToast({ message: '🛵 En camino a la entrega', variant: 'success' });
+    } catch {}
   };
 
   /** Acción principal de una parada según su estado (reutilizada en las tarjetas). */
   const primaryActionFor = (o: DeliveryOrder) => {
     const custody = hasCustody(o);
     if (o.status_tracker_id === 5)
-      return { label: 'En camino', icon: <IcBike size={17} color="#fff" />, style: styles.selBtnRoute, chevron: false, onPress: () => onEnCamino(o.id) };
+      return { label: 'En camino', icon: <IcBike size={17} color="#fff" />, style: styles.selBtnRoute, chevron: false, onPress: () => onEnCamino(o) };
     if (o.status_tracker_id === 6)
       return { label: custody ? 'Cobrar' : 'Entregar', icon: custody ? <IcWallet size={17} color="#fff" /> : <IcCheck size={17} color="#fff" />, style: styles.selBtnDeliver, chevron: true, onPress: () => router.push(`/order/${o.id}`) };
     return { label: 'Ver orden', icon: null, style: styles.selBtnPrimary, chevron: true, onPress: () => router.push(`/order/${o.id}`) };
@@ -192,14 +212,19 @@ export default function MapScreen() {
     Haptics.selectionAsync().catch(() => {});
   };
   const marcharEnCamino = async () => {
-    const ids = [...picked];
-    if (!ids.length) return;
+    const chosen = stops.filter((o) => picked.has(o.id));
+    if (!chosen.length) return;
     setBusy(true);
     try {
-      await Promise.all(ids.map((id) => changeStatus(id, 6)));
+      const res = await Promise.all(chosen.map((o) => queueChangeStatus(o, 6)));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast({ message: `🛵 ${ids.length} entrega${ids.length > 1 ? 's' : ''} En camino`, variant: 'success' });
-      qc.invalidateQueries({ queryKey: MY_ORDERS_KEY });
+      const queued = res.some((r) => r.queued);
+      showToast({
+        message: queued
+          ? `📡 ${chosen.length} entrega${chosen.length > 1 ? 's' : ''} se enviará${chosen.length > 1 ? 'n' : ''} al reconectar`
+          : `🛵 ${chosen.length} entrega${chosen.length > 1 ? 's' : ''} En camino`,
+        variant: queued ? 'info' : 'success',
+      });
       exitSelect();
     } catch {
       showToast({ message: 'No se pudieron actualizar todas las entregas', variant: 'error' });
@@ -230,7 +255,10 @@ export default function MapScreen() {
     <View style={styles.root}>
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+        // iOS: Apple Maps (sin API key). Android: Google Maps (key de build).
+        // La key de la unidad de negocio NO va aquí: alimenta Directions API,
+        // no los tiles nativos (que se fijan en build-time).
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         showsUserLocation
@@ -238,8 +266,14 @@ export default function MapScreen() {
         customMapStyle={MAP_STYLE}
         onPress={() => setSelectedId(null)}
       >
-        {linePoints.length > 1 && (
-          <Polyline coordinates={linePoints} strokeColor={c.primary} strokeWidth={4.5} lineDashPattern={me ? [1, 0] : undefined} geodesic />
+        {(roadCoords ?? (linePoints.length > 1 ? linePoints : null)) && (
+          <Polyline
+            coordinates={roadCoords ?? linePoints}
+            strokeColor={c.primary}
+            strokeWidth={4.5}
+            lineDashPattern={!roadCoords && me ? [1, 0] : undefined}
+            geodesic={!roadCoords}
+          />
         )}
         {stops.map((o, i) => {
           const done = o.status_tracker_id === 7;

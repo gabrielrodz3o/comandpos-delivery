@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { useMyOrders, MY_ORDERS_KEY } from '@hooks/useMyOrders';
-import { changeStatus, markDelivered } from '@services/delivery';
+import { useMyOrders } from '@hooks/useMyOrders';
+import { queueChangeStatus, queueMarkDelivered } from '@services/sync';
 import { useAuthStore } from '@store/useAuthStore';
 import { showToast } from '@store/useToastStore';
 import { Press } from '@components/ui/Press';
@@ -31,7 +30,6 @@ export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const qc = useQueryClient();
   const { orders } = useMyOrders();
   const { user, locationId } = useAuthStore();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -56,8 +54,6 @@ export default function OrderDetail() {
   const delivery = Number(order.delivery_cost) || 0;
   const total = orderTotal(order);
 
-  const refresh = () => qc.invalidateQueries({ queryKey: MY_ORDERS_KEY });
-
   const navigate = () => {
     if (order.delivery_lat && order.delivery_lng) {
       Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${order.delivery_lat},${order.delivery_lng}`);
@@ -70,7 +66,7 @@ export default function OrderDetail() {
   const whatsapp = () => phone && Linking.openURL(`https://wa.me/${phone}`);
 
   const onEnCamino = async () => {
-    try { await changeStatus(order.id, 6); Haptics.selectionAsync(); refresh(); } catch {}
+    try { await queueChangeStatus(order, 6); Haptics.selectionAsync(); } catch {}
   };
   const askDeliver = () => {
     if (!locationId || !user?.use_id) return showToast({ message: 'Falta sucursal/usuario', variant: 'error' });
@@ -79,10 +75,9 @@ export default function OrderDetail() {
   const doDeliver = async () => {
     if (!locationId || !user?.use_id) return;
     try {
-      await markDelivered(order.id, locationId, user.use_id);
+      const res = await queueMarkDelivered(order, locationId, user.use_id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast({ message: '✓ Entregada', variant: 'success' });
-      refresh();
+      if (!res.queued) showToast({ message: '✓ Entregada', variant: 'success' });
       router.back();
     } catch {}
   };

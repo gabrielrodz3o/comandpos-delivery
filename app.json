@@ -18,9 +18,11 @@
       "bundleIdentifier": "com.comandpos.delivery",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Usamos tu ubicación para calcular la ruta y el origen de tus entregas.",
-        "UIBackgroundModes": ["remote-notification"]
-      },
-      "config": { "googleMapsApiKey": "REEMPLAZAR_CON_GOOGLE_MAPS_KEY" }
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.comandpos.delivery",
@@ -33,7 +35,11 @@
         "ACCESS_COARSE_LOCATION",
         "POST_NOTIFICATIONS"
       ],
-      "config": { "googleMaps": { "apiKey": "REEMPLAZAR_CON_GOOGLE_MAPS_KEY" } }
+      "config": {
+        "googleMaps": {
+          "apiKey": "REEMPLAZAR_CON_GOOGLE_MAPS_KEY"
+        }
+      }
     },
     "plugins": [
       "expo-router",
@@ -51,12 +57,20 @@
       ],
       [
         "expo-build-properties",
-        { "android": { "compileSdkVersion": 35, "targetSdkVersion": 35 } }
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
+          }
+        }
       ]
     ],
     "extra": {
       "router": {},
-      "eas": { "projectId": "REEMPLAZAR_CON_EAS_PROJECT_ID" }
-    }
+      "eas": {
+        "projectId": "17cd5c50-d02c-49e6-90b2-64921a48c2ad"
+      }
+    },
+    "owner": "gabrielrodz3o"
   }
 }

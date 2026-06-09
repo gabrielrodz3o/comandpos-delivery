@@ -7,7 +7,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Constants from 'expo-constants';
 import { useAuthStore } from '@store/useAuthStore';
 import { showToast } from '@store/useToastStore';
-import { setAvailability } from '@services/delivery';
+import { queueAvailability } from '@services/sync';
 import { logoutRequest } from '@services/auth';
 import { unregisterPushToken } from '@services/notifications';
 import { disconnectRiderSocket } from '@services/socket';
@@ -41,8 +41,8 @@ export default function AccountScreen() {
     setAvailable(val);
     setSaving(true);
     try {
-      await setAvailability(val);
-      showToast({ message: val ? 'Estás recibiendo pedidos' : 'No vas a recibir nuevos pedidos', variant: val ? 'success' : 'info' });
+      const res = await queueAvailability(val);
+      if (!res.queued) showToast({ message: val ? 'Estás recibiendo pedidos' : 'No vas a recibir nuevos pedidos', variant: val ? 'success' : 'info' });
     } catch {
       setAvailable(!val);
     } finally {

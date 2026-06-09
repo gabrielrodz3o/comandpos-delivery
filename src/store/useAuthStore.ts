@@ -3,12 +3,13 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthUser } from '@types/business';
 
-// URL del backend Nuxt (restaurante-comandpos). Configurable con
-// EXPO_PUBLIC_API_URL (en dev apuntar a la IP LAN de tu máquina, ej:
-// http://192.168.1.50:3000 — el teléfono NO puede usar localhost).
+// URL del backend Nuxt (restaurante-comandpos). Por defecto apunta a
+// producción. En dev, sobreescribir con EXPO_PUBLIC_API_URL apuntando a la
+// IP LAN de tu máquina (ej: http://192.168.1.50:3000 — el teléfono NO puede
+// usar localhost).
 const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || undefined;
-// Dev: IP LAN de la máquina con el backend Nuxt (:3000). EXPO_PUBLIC_API_URL la sobreescribe.
-export const DEFAULT_API_BASE_URL = ENV_API_URL ?? 'http://10.25.1.32:3000';
+// Producción. EXPO_PUBLIC_API_URL la sobreescribe (para dev contra LAN).
+export const DEFAULT_API_BASE_URL = ENV_API_URL ?? 'https://api.comandpos.com';
 
 interface AuthState {
   apiBaseUrl: string | null;
@@ -51,9 +52,10 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          if (ENV_API_URL && state.apiBaseUrl !== ENV_API_URL) {
-            state.setApiBaseUrl(ENV_API_URL);
-          } else if (!state.apiBaseUrl) {
+          // No hay selector manual de URL: la base efectiva es siempre ENV o el
+          // default de producción. Forzamos para migrar valores persistidos
+          // viejos (ej. la IP LAN de dev de una instalación anterior).
+          if (state.apiBaseUrl !== DEFAULT_API_BASE_URL) {
             state.setApiBaseUrl(DEFAULT_API_BASE_URL);
           }
         }
