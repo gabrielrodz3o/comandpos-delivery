@@ -10,7 +10,9 @@ export const MY_ORDERS_KEY = ['my-orders'];
  * de sincronización pueda parchear el cache de forma optimista sin estar en React.
  */
 export const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false } },
+  // refetchOnWindowFocus se apoya en focusManager, cableado al AppState en _layout
+  // (RN no lo hace solo): al volver la app a primer plano se refresca la verdad del server.
+  defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: true } },
 });
 
 export const persister = createAsyncStoragePersister({ storage: AsyncStorage });

@@ -20,6 +20,9 @@ export const connectRiderSocket = (): Socket | null => {
     });
     socket.on('connect', () => {
       socket?.emit('join_user', { user_id: user.use_id });
+      // Tras (re)conectar pudimos perder eventos en background (el SO suspende el
+      // websocket). Forzamos un resync silencioso: los handlers invalidan la lista.
+      handlers.forEach((h) => h({ reason: 'reconnect' }));
     });
     socket.on('rider_order_update', (payload: any) => {
       handlers.forEach((h) => h(payload));
