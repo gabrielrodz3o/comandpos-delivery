@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, memo, type Ref } from 'react';
 import {
-  View, Text, TextInput, Pressable, Keyboard, StatusBar, ActivityIndicator, Platform,
+  View, Text, TextInput, Pressable, Keyboard, StatusBar, ActivityIndicator, Platform, ScrollView,
   type TextInputProps,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
@@ -117,8 +117,8 @@ const Field = memo(function Field({ label, marginTop, icon, secureToggle, fieldR
           placeholderTextColor={c.textMuted}
           style={st.input}
           secureTextEntry={secureToggle}
-          onFocus={(e) => { console.log('[login] FOCUS', label); inputProps.onFocus?.(e); }}
-          onBlur={(e) => { console.log('[login] BLUR', label); inputProps.onBlur?.(e); }}
+          onFocus={inputProps.onFocus}
+          onBlur={inputProps.onBlur}
         />
         {secureToggle && <IcEye color={c.textMuted} off />}
       </View>
@@ -128,6 +128,7 @@ const Field = memo(function Field({ label, marginTop, icon, secureToggle, fieldR
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { setAuth, setLocationId } = useAuthStore();
   const [loading, setLoading] = useState(false);
 
@@ -167,6 +168,14 @@ export default function LoginScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <StatusBar barStyle="light-content" />
+      {/* Scroll: en ventanas cortas (iPad en modo compatibilidad iPhone ≈ 667pt,
+          iPhone SE) el contenido excede el alto y se recortaba abajo (rechazo
+          App Review, Guideline 4). */}
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 16 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
           {/* ───────── HERO ───────── */}
           <Hero />
 
@@ -213,6 +222,7 @@ export default function LoginScreen() {
               ComandPOS · Delivery
             </Text>
           </View>
+      </ScrollView>
     </View>
   );
 }

@@ -46,7 +46,7 @@ export default function SelectLocationScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <StatusBar barStyle="light-content" />
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
         <View style={{ paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8 }}>
           <Text style={{ color: c.text, fontSize: 24, fontWeight: '900', letterSpacing: -0.5 }}>
             ¿Dónde trabajás hoy?
