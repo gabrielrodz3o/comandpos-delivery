@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Linking, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, Linking, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import MapWeb, { type MapWebHandle, type MapScene } from '@components/map/MapWeb';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
@@ -61,7 +61,7 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapWebHandle>(null);
   const { active, activeRouteId, tripStarted } = useMyOrders();
   const { googleMapsApiKey } = useBusinessConfig();
   const [me, setMe] = useState<LL | null>(null);
@@ -118,13 +118,7 @@ export default function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [googleMapsApiKey, me?.lat, me?.lng, stops.map((s) => s.id).join(',')]);
 
-  const fitAll = () => {
-    const pts = stops.map((o) => ({ latitude: Number(o.delivery_lat), longitude: Number(o.delivery_lng) }));
-    if (me) pts.push({ latitude: me.lat, longitude: me.lng });
-    if (pts.length && mapRef.current) {
-      mapRef.current.fitToCoordinates(pts, { edgePadding: { top: 90, right: 60, bottom: 230, left: 60 }, animated: true });
-    }
-  };
+  const fitAll = () => mapRef.current?.fit();
   useEffect(() => { fitAll(); }, [stops.length, me]);
 
   /** Obtiene la ubicación actual (la pide en el momento si hace falta). */
@@ -239,76 +233,75 @@ export default function MapScreen() {
     Linking.openURL(`https://www.google.com/maps/dir/?api=1${wpParam}&destination=${dest}`);
   };
 
-  const initialRegion: Region = {
-    latitude: stops[0] ? Number(stops[0].delivery_lat) : me?.lat ?? 19.4517,
-    longitude: stops[0] ? Number(stops[0].delivery_lng) : me?.lng ?? -70.697,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
+  const center = {
+    lat: stops[0] ? Number(stops[0].delivery_lat) : me?.lat ?? 19.4517,
+    lng: stops[0] ? Number(stops[0].delivery_lng) : me?.lng ?? -70.697,
   };
 
-  const linePoints = [
-    ...(me ? [{ latitude: me.lat, longitude: me.lng }] : []),
-    ...stops.map((o) => ({ latitude: Number(o.delivery_lat), longitude: Number(o.delivery_lng) })),
-  ];
+  // Trazo: ruta por calles (Directions) o, en su defecto, recto me→paradas.
+  const sceneLine = roadCoords
+    ? roadCoords.map((p) => ({ lat: p.latitude, lng: p.longitude }))
+    : (() => {
+        const pts = [
+          ...(me ? [{ lat: me.lat, lng: me.lng }] : []),
+          ...stops.map((o) => ({ lat: Number(o.delivery_lat), lng: Number(o.delivery_lng) })),
+        ];
+        return pts.length > 1 ? pts : null;
+      })();
+
+  // Escena declarativa: el estado (color/selección/halo) se resuelve acá y el
+  // WebView solo dibuja. Mismo criterio de color que tenían los <Marker>.
+  const scene: MapScene = {
+    center,
+    me,
+    line: sceneLine,
+    dashed: !roadCoords,
+    stops: stops.map((o, i) => {
+      const done = o.status_tracker_id === 7;
+      const enRoute = o.status_tracker_id === 6;
+      const eligible = [4, 5].includes(o.status_tracker_id);
+      const isPicked = picked.has(o.id);
+      const isSel = o.id === selectedId;
+      const isNext = !selectMode && nextStop?.id === o.id;
+      const color = selectMode
+        ? (isPicked ? c.primary : eligible ? c.textMuted : done ? c.success : c.info)
+        : done ? c.success : enRoute ? c.info : c.primary;
+      return {
+        id: o.id,
+        lat: Number(o.delivery_lat),
+        lng: Number(o.delivery_lng),
+        label: String(i + 1),
+        color,
+        size: isSel || isPicked ? 38 : 30,
+        halo: isNext,
+        dim: selectMode && eligible && !isPicked,
+        check: selectMode && isPicked,
+      };
+    }),
+  };
+
+  const onMarkerPress = (id: number) => {
+    const o = stops.find((s) => s.id === id);
+    if (!o) return;
+    if (selectMode) {
+      if ([4, 5].includes(o.status_tracker_id)) togglePick(o.id);
+      return;
+    }
+    setSelectedId(o.id);
+    Haptics.selectionAsync().catch(() => {});
+  };
 
   return (
     <View style={styles.root}>
-      <MapView
+      <MapWeb
         ref={mapRef}
-        // iOS: Apple Maps (sin API key). Android: Google Maps (key de build).
-        // La key de la unidad de negocio NO va aquí: alimenta Directions API,
-        // no los tiles nativos (que se fijan en build-time).
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        style={StyleSheet.absoluteFill}
-        initialRegion={initialRegion}
-        showsUserLocation
-        showsMyLocationButton={false}
-        customMapStyle={MAP_STYLE}
-        onPress={() => setSelectedId(null)}
-      >
-        {(roadCoords ?? (linePoints.length > 1 ? linePoints : null)) && (
-          <Polyline
-            coordinates={roadCoords ?? linePoints}
-            strokeColor={c.primary}
-            strokeWidth={4.5}
-            lineDashPattern={!roadCoords && me ? [1, 0] : undefined}
-            geodesic={!roadCoords}
-          />
-        )}
-        {stops.map((o, i) => {
-          const done = o.status_tracker_id === 7;
-          const enRoute = o.status_tracker_id === 6;
-          const eligible = [4, 5].includes(o.status_tracker_id);
-          const isPicked = picked.has(o.id);
-          const isSel = o.id === selectedId;
-          const isNext = !selectMode && nextStop?.id === o.id;
-          const color = selectMode
-            ? (isPicked ? c.primary : eligible ? c.textMuted : done ? c.success : c.info)
-            : done ? c.success : enRoute ? c.info : c.primary;
-          const dim = selectMode && eligible && !isPicked;
-          return (
-            <Marker
-              key={o.id}
-              coordinate={{ latitude: Number(o.delivery_lat), longitude: Number(o.delivery_lng) }}
-              anchor={{ x: 0.5, y: 1 }}
-              onPress={() => {
-                if (selectMode) { if (eligible) togglePick(o.id); return; }
-                setSelectedId(o.id); Haptics.selectionAsync().catch(() => {});
-              }}
-              zIndex={isSel || isPicked ? 99 : i}
-            >
-              <View style={styles.pinWrap}>
-                <View style={[styles.pinHaloBox, isNext && styles.pinHaloOn]}>
-                  <View style={[styles.pin, { backgroundColor: color }, (isSel || isPicked) && styles.pinSel, dim && styles.pinDim]}>
-                    {selectMode && isPicked ? <IcCheck size={16} color="#fff" /> : <Text style={styles.pinTxt}>{i + 1}</Text>}
-                  </View>
-                </View>
-                <View style={[styles.pinTip, { borderTopColor: color }]} />
-              </View>
-            </Marker>
-          );
-        })}
-      </MapView>
+        apiKey={googleMapsApiKey}
+        scene={scene}
+        mapStyle={MAP_STYLE}
+        primary={c.primary}
+        onMarkerPress={onMarkerPress}
+        onMapPress={() => setSelectedId(null)}
+      />
 
       {/* Recentrar */}
       <Press style={[styles.fab, { top: insets.top + 12 }]} onPress={fitAll} scaleTo={0.92}>

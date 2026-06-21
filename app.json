@@ -34,12 +34,7 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "POST_NOTIFICATIONS"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "REEMPLAZAR_CON_GOOGLE_MAPS_KEY"
-        }
-      }
+      ]
     },
     "plugins": [
       "expo-router",
