@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "619504352881",
+    "project_id": "comandpos-delivery",
+    "storage_bucket": "comandpos-delivery.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:619504352881:android:ce3a8b46b780562f13a5d0",
+        "android_client_info": {
+          "package_name": "com.comandpos.delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcup8UJFpThC6ZKeyzkoYMH2Of2oANtmk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -8,3 +8,6 @@ ios/
 android/
 expo-env.d.ts
 .env*.local
+
+# Firebase FCM service account key (SECRETO - nunca commitear)
+*-firebase-adminsdk-*.json
