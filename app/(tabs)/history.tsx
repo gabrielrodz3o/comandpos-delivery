@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, FlatList, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useFocusEffect } from "expo-router";
 import { getHistory } from "@services/delivery";
 import { currentScope, sessionKey } from "@services/session";
 import { useAuthStore } from "@store/useAuthStore";
@@ -50,6 +51,13 @@ export default function HistoryScreen() {
       ),
     getNextPageParam: (last) => last.next_offset ?? undefined,
   });
+  // La pestaña no se desmonta al navegar y esta consulta no tiene refetchInterval:
+  // sin esto, una entrega recién completada no aparece hasta hacer pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch();
+    }, [query.refetch]),
+  );
   const localDeliveries = operational.orders.filter(
     (o) =>
       o.pending_sync &&

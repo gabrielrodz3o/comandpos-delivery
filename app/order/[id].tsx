@@ -117,7 +117,13 @@ export default function OrderDetail() {
               if (!routeId)
                 routeId = (await groupMine([order.id]))?.data?.route_id;
               if (!routeId) throw new Error("No se pudo confirmar el viaje.");
-              await pickupRoute({ routeId });
+              const res = await pickupRoute({ routeId });
+              // 200 con picked vacío = el servidor no selló nada; no fingir éxito.
+              if (!res?.data?.picked?.length)
+                throw new Error(
+                  res?.message ||
+                    "El servidor no registró la recogida. Revisa el estado del viaje.",
+                );
             }, "Recogida registrada."),
         },
       ],

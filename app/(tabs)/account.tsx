@@ -62,6 +62,10 @@ export default function AccountScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      // Las pestañas no se desmontan al navegar, así que sin esto los fondos y el
+      // estado operativo solo se refrescan por reloj (30/60 s) y caja parece no
+      // haber entregado nada todavía.
+      void qc.invalidateQueries({ queryKey: sessionKey(scope) });
       Promise.all([
         Location.getForegroundPermissionsAsync(),
         Notifications.getPermissionsAsync(),
@@ -83,7 +87,7 @@ export default function AccountScreen() {
       return () => {
         active = false;
       };
-    }, []),
+    }, [qc, scope]),
   );
   const refresh = () =>
     void qc.invalidateQueries({ queryKey: sessionKey(scope) });

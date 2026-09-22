@@ -64,11 +64,17 @@ export default function OrdersScreen() {
           onPress: async () => {
             setBusy(true);
             try {
-              await pickupRoute({ routeId: route.id });
+              const res = await pickupRoute({ routeId: route.id });
               refresh();
+              // El servidor puede responder 200 sin sellar nada (viaje ya en camino,
+              // paradas no listas): no anunciar éxito si no recogió ninguna.
+              const picked = res?.data?.picked?.length ?? 0;
               showToast({
-                message: "Recogida registrada. Buen viaje.",
-                variant: "success",
+                message: picked
+                  ? "Recogida registrada. Buen viaje."
+                  : res?.message ||
+                    "El servidor no registró ninguna recogida. Revisa el estado del viaje.",
+                variant: picked ? "success" : "warning",
               });
             } catch (e: any) {
               showToast({
