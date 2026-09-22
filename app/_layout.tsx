@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -7,14 +7,21 @@ import { Stack, useRouter } from 'expo-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { focusManager } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
+import * as Haptics from 'expo-haptics';
 
 import { useAuthStore } from '@store/useAuthStore';
 import { ToastHost } from '@components/ui/ToastHost';
 import { SyncBanner } from '@components/ui/SyncBanner';
 import { registerForPushNotifications } from '@services/notifications';
-import { connectRiderSocket, disconnectRiderSocket } from '@services/socket';
+import { connectRiderSocket, disconnectRiderSocket, onRiderUpdate } from '@services/socket';
 import { queryClient, persister, MY_ORDERS_KEY } from '@services/queryClient';
 import { startSyncManager } from '@services/sync';
+import { DeliveryIntro } from '@components/brand/DeliveryIntro';
+import { currentScope, sessionKey } from '@services/session';
+
+// Mantener el splash nativo hasta que la escena animada tenga su primer layout.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 /** Refresca la lista de órdenes (la verdad del server). */
 const refreshOrders = () => queryClient.invalidateQueries({ queryKey: MY_ORDERS_KEY });
@@ -23,11 +30,16 @@ const refreshOrders = () => queryClient.invalidateQueries({ queryKey: MY_ORDERS_
 function SessionEffects() {
   const router = useRouter();
   const token = useAuthStore((s) => s.token);
+  const locationId = useAuthStore((s) => s.locationId);
 
   useEffect(() => {
     if (!token) return;
     registerForPushNotifications();
     connectRiderSocket();
+    const off = onRiderUpdate((payload) => {
+      queryClient.invalidateQueries({queryKey:sessionKey(currentScope())});
+      if (payload?.reason === 'assigned') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(()=>{});
+    });
     const stopSync = startSyncManager();
 
     // React Query no cablea su focusManager al AppState en RN: lo hacemos nosotros
@@ -62,28 +74,37 @@ function SessionEffects() {
       focusSub.remove();
       disconnectRiderSocket();
       stopSync();
+      off();
     };
-  }, [token]);
+  }, [token, locationId]);
 
   return null;
 }
 
 export default function RootLayout() {
+  const [introVisible, setIntroVisible] = useState(true);
+  const hydrated = useAuthStore((state) => state.hydrated);
+  const toLogin = useAuthStore((state) => !state.token);
+  const finishIntro = useCallback(() => setIntroVisible(false), []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
-          <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="select-location" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="order/[id]" options={{ presentation: 'card' }} />
-          </Stack>
+        <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, buster: 'rider-scoped-v2' }}>
+          <View style={{ flex: 1 }} accessibilityElementsHidden={introVisible} importantForAccessibility={introVisible ? 'no-hide-descendants' : 'auto'}>
+            <StatusBar style="dark" />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="select-location" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="order/[id]" options={{ presentation: 'card' }} />
+            </Stack>
+            <SyncBanner />
+            <ToastHost />
+          </View>
           <SessionEffects />
-          <SyncBanner />
-          <ToastHost />
+          {introVisible && <DeliveryIntro ready={hydrated} toLogin={toLogin} onFinish={finishIntro} />}
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

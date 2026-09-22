@@ -1,166 +1,181 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import { useMyOrders } from '@hooks/useMyOrders';
-import { Press } from '@components/ui/Press';
-import { IcCheckCircle, IcTrendingUp, IcWallet, IcReceipt, IcClock } from '@components/ui/icons';
-import { palette, shadow } from '@theme/colors';
-import { money, orderTotal } from '@utils/format';
-import type { DeliveryOrder } from '@types/delivery';
-
-const c = palette.dark;
-
-type Period = 'today' | 'all';
-const whenOf = (o: DeliveryOrder) => o.completed_at || o.updated_at || '';
-const timeLabel = (iso: string) => {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true });
-};
-const hadCustody = (o: DeliveryOrder) => ['collected', 'settled', 'partial'].includes(o.rider_collection_status ?? '');
-
+import { useEffect, useMemo, useState } from "react";
+import { View, Text, FlatList, RefreshControl } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { getHistory } from "@services/delivery";
+import { currentScope, sessionKey } from "@services/session";
+import { useAuthStore } from "@store/useAuthStore";
+import {
+  ui,
+  Button,
+  Chips,
+  SearchField,
+  QueryNotice,
+  OrderCard,
+} from "@components/ui/DeliveryUI";
+import { dayLabel, matchesSearch } from "@utils/delivery";
+import { useMyOrders } from "@hooks/useMyOrders";
+import { PageHeading } from "@components/ui/DeliveryDesign";
+import { IcReceipt, IcClock } from "@components/ui/icons";
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { orders } = useMyOrders();
-  const [period, setPeriod] = useState<Period>('today');
-
+  const { token } = useAuthStore();
+  const scope = currentScope();
+  const operational = useMyOrders();
+  const [days, setDays] = useState("1");
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setTerm(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const today = new Date().toDateString();
-  const delivered = orders
-    .filter((o) => o.status_tracker_id === 7)
-    .filter((o) => (period === 'today' ? new Date(whenOf(o)).toDateString() === today : true))
-    .sort((a, b) => new Date(whenOf(b)).getTime() - new Date(whenOf(a)).getTime());
-
-  const earnings = delivered.reduce((s, o) => s + orderTotal(o), 0);
-  const cash = delivered.filter(hadCustody).reduce((s, o) => s + (Number(o.rider_collection_amount) || 0), 0);
-  const avg = delivered.length ? earnings / delivered.length : 0;
-
+  const range = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (Number(days) - 1));
+    const end = new Date();
+    end.setHours(24, 0, 0, 0);
+    return { from: start.toISOString(), to: end.toISOString() };
+  }, [days, today]);
+  const query = useInfiniteQuery({
+    queryKey: sessionKey(scope, "history", range, filter, term),
+    enabled: !!token,
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getHistory(
+        { ...range, offset: pageParam, search: term, status: filter },
+        signal,
+      ),
+    getNextPageParam: (last) => last.next_offset ?? undefined,
+  });
+  const localDeliveries = operational.orders.filter(
+    (o) =>
+      o.pending_sync &&
+      ["all", "delivered"].includes(filter) &&
+      matchesSearch(o, term) &&
+      (o.completed_at || "") >= range.from &&
+      (o.completed_at || "") < range.to,
+  );
+  const orders = [
+    ...new Map(
+      [
+        ...(query.data?.pages.flatMap((p) => p.data) || []),
+        ...localDeliveries,
+      ].map((o) => [o.id, o]),
+    ).values(),
+  ].sort(
+    (a, b) =>
+      Date.parse(b.activity_at || b.completed_at || "") -
+      Date.parse(a.activity_at || a.completed_at || ""),
+  );
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 10 }]}>
-      <View style={styles.header}>
-        <Text style={styles.kicker}>Tu rendimiento</Text>
-        <Text style={styles.title}>Historial</Text>
-      </View>
-
-      {/* Segmento de período */}
-      <View style={styles.segment}>
-        {(['today', 'all'] as Period[]).map((p) => {
-          const on = period === p;
-          return (
-            <Press key={p} style={[styles.segBtn, on && styles.segBtnOn]} onPress={() => setPeriod(p)} scaleTo={0.97}>
-              <Text style={[styles.segTxt, on && styles.segTxtOn]}>{p === 'today' ? 'Hoy' : 'Últimas 48h'}</Text>
-            </Press>
-          );
-        })}
-      </View>
-
+    <View style={[ui.page, { paddingTop: insets.top }]}>
+      <PageHeading
+        title="Historial"
+        eyebrow="El recorrido de tu jornada"
+        subtitle="Entregas y cobros, con cada detalle a mano."
+        icon={<IcReceipt size={25} color="#B65D28" />}
+      />
       <FlatList
-        data={delivered}
+        data={orders}
         keyExtractor={(o) => String(o.id)}
-        contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: insets.bottom + 24, gap: 9 }}
-        showsVerticalScrollIndicator={false}
+        contentContainerStyle={ui.content}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={query.isRefetching && !query.isFetchingNextPage}
+            onRefresh={() => void query.refetch()}
+          />
+        }
         ListHeaderComponent={
-          <View style={{ marginBottom: 14, gap: 11 }}>
-            {/* Hero facturación */}
-            <Animated.View entering={FadeInDown.springify().damping(16)}>
-              <LinearGradient colors={[c.primaryHi, c.brandMid]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-                <View style={styles.heroGlow} pointerEvents="none" />
-                <View style={styles.heroTop}>
-                  <Text style={styles.heroLbl}>Facturado {period === 'today' ? 'hoy' : '· 48h'}</Text>
-                  <View style={styles.heroChip}><IcTrendingUp size={13} color="#fff" /><Text style={styles.heroChipTxt}>{delivered.length} entregas</Text></View>
-                </View>
-                <Text style={styles.heroVal}>{money(earnings)}</Text>
-                <Text style={styles.heroSub}>Ticket promedio {money(avg)}</Text>
-              </LinearGradient>
-            </Animated.View>
-
-            {/* KPIs */}
-            <View style={styles.kpis}>
-              <Kpi icon={<IcCheckCircle size={18} color={c.success} />} value={String(delivered.length)} label="Entregas" tint="#EAF6EE" />
-              <Kpi icon={<IcWallet size={18} color={c.warning} />} value={money(cash)} label="Efectivo cobrado" tint="#FEF3C7" />
+          <View style={{ gap: 14, marginBottom: 4 }}>
+            <Chips
+              value={days}
+              onChange={setDays}
+              items={[
+                { id: "1", label: "Hoy" },
+                { id: "7", label: "7 días" },
+                { id: "30", label: "30 días" },
+              ]}
+            />
+            <SearchField value={search} onChangeText={setSearch} />
+            <Chips
+              value={filter}
+              onChange={setFilter}
+              items={[
+                { id: "all", label: "Todas" },
+                { id: "delivered", label: "Entregadas" },
+                { id: "cancelled", label: "Canceladas" },
+                { id: "incidents", label: "Incidencias" },
+              ]}
+            />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                paddingTop: 7,
+                paddingBottom: 4,
+              }}
+            >
+              <IcClock size={15} color="#A07D61" />
+              <Text style={[ui.muted, { fontWeight: "700" }]}>
+                {query.data
+                  ? `${orders.length} ${orders.length === 1 ? "orden" : "órdenes"} en esta vista`
+                  : "Historial por cargar"}
+                {query.hasNextPage ? " · hay más resultados" : ""}
+              </Text>
+              <View
+                style={{
+                  height: 1,
+                  flex: 1,
+                  backgroundColor: "#E8DFD4",
+                  marginLeft: 6,
+                }}
+              />
             </View>
+            <QueryNotice
+              loading={query.isLoading}
+              error={query.error}
+              stale={!!query.data}
+              onRetry={() => void query.refetch()}
+            />
           </View>
         }
         ListEmptyComponent={
-          <Animated.View entering={FadeIn.duration(450)} style={styles.empty}>
-            <View style={styles.emptyArt}><IcReceipt size={40} color={c.primary} /></View>
-            <Text style={styles.emptyTitle}>Sin entregas {period === 'today' ? 'hoy' : 'aún'}</Text>
-            <Text style={styles.emptyTxt}>Tus entregas completadas van a aparecer acá con su detalle.</Text>
-          </Animated.View>
+          !query.isLoading && !query.error ? (
+            <QueryNotice empty="No hay órdenes en este período" />
+          ) : null
         }
-        renderItem={({ item, index }) => (
-          <Animated.View entering={FadeInDown.delay(Math.min(index * 45, 300)).springify().damping(15)} style={styles.card}>
-            <View style={styles.checkDot}><IcCheckCircle size={20} color={c.success} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name} numberOfLines={1}>{item.delivery_contact_name || item.name || `#${item.id}`}</Text>
-              <View style={styles.metaRow}>
-                {!!timeLabel(whenOf(item)) && (
-                  <View style={styles.timeWrap}><IcClock size={12} color={c.textMuted} /><Text style={styles.time}>{timeLabel(whenOf(item))}</Text></View>
-                )}
-                {!!item.delivery_neighborhood && <Text style={styles.addr} numberOfLines={1}>· {item.delivery_neighborhood}</Text>}
-              </View>
+        ListFooterComponent={
+          query.hasNextPage ? (
+            <View style={{ marginTop: 16 }}>
+              <Button
+                secondary
+                label="Cargar más órdenes"
+                busy={query.isFetchingNextPage}
+                onPress={() => void query.fetchNextPage()}
+              />
             </View>
-            <Text style={styles.money}>{money(orderTotal(item))}</Text>
-          </Animated.View>
-        )}
+          ) : null
+        }
+        renderItem={({ item, index }) => {
+          const day = dayLabel(item.activity_at || item.completed_at);
+          const previous = index
+            ? dayLabel(
+                orders[index - 1].activity_at || orders[index - 1].completed_at,
+              )
+            : null;
+          return (
+            <View style={{ gap: 10 }}>
+              {day !== previous && <Text style={ui.eyebrow}>{day}</Text>}
+              <OrderCard order={item} history />
+            </View>
+          );
+        }}
       />
     </View>
   );
 }
-
-function Kpi({ icon, value, label, tint }: { icon: React.ReactNode; value: string; label: string; tint: string }) {
-  return (
-    <View style={styles.kpi}>
-      <View style={[styles.kpiIcon, { backgroundColor: tint }]}>{icon}</View>
-      <Text style={styles.kpiVal} numberOfLines={1}>{value}</Text>
-      <Text style={styles.kpiLbl}>{label}</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.bg },
-  header: { paddingHorizontal: 18, paddingBottom: 12 },
-  kicker: { fontSize: 13, color: c.textMuted, fontWeight: '700' },
-  title: { fontSize: 30, fontWeight: '900', color: c.text, letterSpacing: -0.8, marginTop: 2 },
-
-  segment: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 12, backgroundColor: c.soft, borderRadius: 14, padding: 4, gap: 4 },
-  segBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
-  segBtnOn: { backgroundColor: c.surface, ...shadow.sm },
-  segTxt: { fontSize: 13.5, fontWeight: '700', color: c.textDim },
-  segTxtOn: { color: c.text, fontWeight: '800' },
-
-  // Hero
-  hero: { borderRadius: 22, padding: 20, overflow: 'hidden', ...shadow.md, shadowColor: c.primary },
-  heroGlow: { position: 'absolute', top: -60, right: -30, width: 170, height: 170, borderRadius: 85, backgroundColor: 'rgba(255,255,255,0.16)' },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroLbl: { color: 'rgba(255,255,255,0.92)', fontSize: 13.5, fontWeight: '700' },
-  heroChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  heroChipTxt: { color: '#fff', fontSize: 11.5, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  heroVal: { color: '#fff', fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginTop: 12, fontVariant: ['tabular-nums'] },
-  heroSub: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums'] },
-
-  // KPIs
-  kpis: { flexDirection: 'row', gap: 11 },
-  kpi: { flex: 1, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 18, padding: 15, ...shadow.sm },
-  kpiIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  kpiVal: { fontSize: 20, fontWeight: '900', color: c.text, fontVariant: ['tabular-nums'], letterSpacing: -0.4 },
-  kpiLbl: { fontSize: 12, color: c.textDim, marginTop: 3, fontWeight: '600' },
-
-  // Card
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 13, gap: 12, ...shadow.sm },
-  checkDot: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#EAF6EE', alignItems: 'center', justifyContent: 'center' },
-  name: { fontSize: 15, fontWeight: '800', color: c.text, letterSpacing: -0.2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  timeWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  time: { fontSize: 12, color: c.textMuted, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  addr: { fontSize: 12, color: c.textMuted, flexShrink: 1 },
-  money: { fontSize: 16, fontWeight: '900', color: c.text, fontVariant: ['tabular-nums'], letterSpacing: -0.3 },
-
-  // Empty
-  empty: { alignItems: 'center', marginTop: 50, paddingHorizontal: 44 },
-  emptyArt: { width: 90, height: 90, borderRadius: 28, backgroundColor: c.primaryDim, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: c.text },
-  emptyTxt: { color: c.textDim, fontSize: 14, textAlign: 'center', marginTop: 7, lineHeight: 20 },
-});

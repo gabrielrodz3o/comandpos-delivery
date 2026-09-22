@@ -1,11 +1,13 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { useAuthStore } from '@store/useAuthStore';
 import { showToast } from '@store/useToastStore';
+import { currentScope } from './session';
 
 declare module 'axios' {
   interface AxiosRequestConfig {
     /** Si es true, el interceptor no muestra toast de error (lo maneja el caller). */
     skipErrorToast?: boolean;
+    deliveryScope?: string;
   }
 }
 
@@ -41,6 +43,9 @@ const createInstance = (): AxiosInstance => {
   });
 
   inst.interceptors.request.use((config) => {
+    if (config.deliveryScope && config.deliveryScope !== currentScope()) {
+      return Promise.reject({ status: 409, message: 'La sesión cambió. Vuelve a abrir esta pantalla.' });
+    }
     const { token, apiBaseUrl: base } = useAuthStore.getState();
     if (base) config.baseURL = base;
     if (token) config.headers.set('Authorization', `Bearer ${token}`);
@@ -50,9 +55,9 @@ const createInstance = (): AxiosInstance => {
   inst.interceptors.response.use(
     (res) => res,
     (error: AxiosError) => {
-      const norm = normalizeError(error);
+      const norm = (error as any)?.status ? error as any : normalizeError(error);
       // 401 → cerrar sesión
-      if (norm.status === 401) {
+      if (norm.status === 401 && (!error.config?.deliveryScope || error.config.deliveryScope === currentScope())) {
         useAuthStore.getState().logout();
       }
       if (!error.config?.skipErrorToast) {

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AuthUser } from '@types/business';
+import type { AuthUser } from '@/types/business';
 
 // URL del backend Nuxt (restaurante-comandpos). Por defecto apunta a
 // producción. En dev, sobreescribir con EXPO_PUBLIC_API_URL apuntando a la
@@ -59,7 +59,8 @@ export const useAuthStore = create<AuthState>()(
             state.setApiBaseUrl(DEFAULT_API_BASE_URL);
           }
         }
-        state?.setHydrated();
+        if (state) state.setHydrated();
+        else useAuthStore.setState({ hydrated: true });
       },
     },
   ),

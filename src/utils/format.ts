@@ -1,12 +1,10 @@
-export const money = (n: number | string | null | undefined): string => {
-  const v = Number(n) || 0;
-  return new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', maximumFractionDigits: 0 }).format(v);
+export const money = (n: number | string | null | undefined, currency = 'DOP'): string => {
+  if (n == null || n === '' || !Number.isFinite(Number(n))) return 'Por confirmar';
+  return new Intl.NumberFormat('es-DO', { style: 'currency', currency: /^[A-Z]{3}$/.test(currency) ? currency : 'DOP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n));
 };
 
-export const orderTotal = (o: { order_subtotal?: number | string | null; delivery_cost?: number | string | null }): number => {
-  const sub = Number(o.order_subtotal) || 0;
-  const fee = Number(o.delivery_cost) || 0;
-  return sub + sub * 0.18 + fee; // aprox con ITBIS, igual que la web
+export const orderTotal = (o: { order_total?: number | string | null }): number | null => {
+  return o.order_total != null && Number.isFinite(Number(o.order_total)) ? Number(o.order_total) : null;
 };
 
 export const initials = (name?: string | null): string => {

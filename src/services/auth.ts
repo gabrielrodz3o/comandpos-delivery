@@ -1,5 +1,5 @@
 import { api } from './apiClient';
-import type { AuthUser } from '@types/business';
+import type { AuthUser } from '@/types/business';
 
 export interface LoginPayload {
   username: string;

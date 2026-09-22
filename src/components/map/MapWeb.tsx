@@ -1,7 +1,15 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { palette } from '@theme/colors';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { Press } from "@components/ui/Press";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import { palette } from "@theme/colors";
 
 const c = palette.dark;
 
@@ -10,11 +18,11 @@ export interface SceneStop {
   id: number;
   lat: number;
   lng: number;
-  label: string;   // número de parada
-  color: string;   // hex del pin
-  size: number;    // diámetro base (30 normal, 38 seleccionado)
-  halo?: boolean;  // anillo "próxima entrega"
-  dim?: boolean;   // atenuado (no elegido en selectMode)
+  label: string; // número de parada
+  color: string; // hex del pin
+  size: number; // diámetro base (30 normal, 38 seleccionado)
+  halo?: boolean; // anillo "próxima entrega"
+  dim?: boolean; // atenuado (no elegido en selectMode)
   check?: boolean; // muestra check en vez del número
 }
 
@@ -24,6 +32,7 @@ export interface MapScene {
   me: { lat: number; lng: number } | null;
   line: { lat: number; lng: number }[] | null;
   dashed: boolean; // true = trazo recto (fallback), false = ruta por calles
+  padding?: { top: number; right: number; bottom: number; left: number };
 }
 
 export interface MapWebHandle {
@@ -60,15 +69,28 @@ const MapWeb = forwardRef<MapWebHandle, Props>(function MapWeb(
 ) {
   const webRef = useRef<WebView>(null);
   const ready = useRef(false);
+  const [failure, setFailure] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    ready.current = false;
+    setFailure(false);
+    setLoaded(false);
+    const timeout = setTimeout(() => {
+      if (!ready.current) setFailure(true);
+    }, 20000);
+    return () => clearTimeout(timeout);
+  }, [apiKey, attempt]);
   const lastScene = useRef<MapScene>(scene);
   lastScene.current = scene;
 
   useImperativeHandle(ref, () => ({
-    fit: () => webRef.current?.injectJavaScript('window.__fit && window.__fit();true;'),
+    fit: () =>
+      webRef.current?.injectJavaScript("window.__fit && window.__fit();true;"),
   }));
 
   const html = useMemo(
-    () => (apiKey ? buildHtml(apiKey, mapStyle, primary) : ''),
+    () => (apiKey ? buildHtml(apiKey, mapStyle, primary) : ""),
     [apiKey, mapStyle, primary],
   );
 
@@ -86,47 +108,103 @@ const MapWeb = forwardRef<MapWebHandle, Props>(function MapWeb(
     } catch {
       return;
     }
-    if (msg.type === 'ready') {
+    if (msg.type === "ready") {
       ready.current = true;
+      setLoaded(true);
+      setFailure(false);
       // primer dibujado + encuadre inicial
       webRef.current?.injectJavaScript(
         `window.__setScene(${JSON.stringify(lastScene.current)});window.__fit&&window.__fit();true;`,
       );
-    } else if (msg.type === 'markerPress' && typeof msg.id === 'number') {
+    } else if (msg.type === "authError") {
+      setFailure(true);
+    } else if (msg.type === "markerPress" && typeof msg.id === "number") {
       onMarkerPress(msg.id);
-    } else if (msg.type === 'mapPress') {
+    } else if (msg.type === "mapPress") {
       onMapPress();
     }
   };
 
   if (!apiKey) {
     // Sin key del tenant no hay mapa JS; fondo neutro (la UI inferior sigue).
-    return <View style={[StyleSheet.absoluteFill, styles.fallback]} />;
+    return (
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.fallback,
+          { justifyContent: "center", alignItems: "center", padding: 24 },
+        ]}
+      >
+        <Text style={{ color: c.textDim, textAlign: "center" }}>
+          Mapa no disponible para esta sucursal. Tus entregas siguen disponibles
+          debajo.
+        </Text>
+      </View>
+    );
   }
 
   return (
-    <WebView
-      key={apiKey} // remonta si cambia el tenant
-      ref={webRef}
-      style={StyleSheet.absoluteFill}
-      originWhitelist={['*']}
-      source={{ html, baseUrl: 'https://localhost/' }}
-      onMessage={onMessage}
-      javaScriptEnabled
-      domStorageEnabled
-      androidLayerType="hardware"
-      scrollEnabled={false}
-      overScrollMode="never"
-      setBuiltInZoomControls={false}
-      allowsInlineMediaPlayback
-    />
+    <View style={StyleSheet.absoluteFill}>
+      <WebView
+        key={`${apiKey}:${attempt}`}
+        ref={webRef}
+        style={StyleSheet.absoluteFill}
+        originWhitelist={["*"]}
+        source={{ html, baseUrl: "https://localhost/" }}
+        onMessage={onMessage}
+        onError={() => setFailure(true)}
+        onHttpError={() => setFailure(true)}
+        javaScriptEnabled
+        domStorageEnabled
+        androidLayerType="hardware"
+        scrollEnabled={false}
+        overScrollMode="never"
+        setBuiltInZoomControls={false}
+        allowsInlineMediaPlayback
+      />
+      {(!loaded || failure) && (
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.fallback,
+            {
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 24,
+              gap: 12,
+            },
+          ]}
+        >
+          {failure ? (
+            <>
+              <Text style={{ color: c.textDim, textAlign: "center" }}>
+                No se pudo cargar el mapa. Revisa la conexión o consulta a caja.
+              </Text>
+              <Press
+                style={{ padding: 12 }}
+                onPress={() => setAttempt((n) => n + 1)}
+              >
+                <Text style={{ color: c.brandMid, fontWeight: "800" }}>
+                  Reintentar mapa
+                </Text>
+              </Press>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator color={c.brandMid} />
+              <Text style={{ color: c.textDim }}>Cargando mapa…</Text>
+            </>
+          )}
+        </View>
+      )}
+    </View>
   );
 });
 
 export default MapWeb;
 
 const styles = StyleSheet.create({
-  fallback: { backgroundColor: '#f7f4ef' },
+  fallback: { backgroundColor: "#f7f4ef" },
 });
 
 /** HTML estático del mapa. La escena (markers/ruta/yo) se inyecta luego. */
@@ -145,7 +223,7 @@ function buildHtml(apiKey: string, mapStyle: unknown, primary: string): string {
 <script>
 var PRIMARY = ${JSON.stringify(primary)};
 var MAP_STYLE = ${style};
-var map, markers = [], meMarker = null, routeLine = null, didFit = false;
+var map, markers = [], meMarker = null, routeLine = null, fittedSignature = null;
 var sceneRef = null;
 
 function post(o){ try{ window.ReactNativeWebView.postMessage(JSON.stringify(o)); }catch(e){} }
@@ -196,6 +274,8 @@ window.__setScene = function(s){
       icons: s.dashed ? [{icon:{path:'M 0,-1 0,1', strokeOpacity:1, strokeWeight:4.5, scale:2.2}, offset:'0', repeat:'13px'}] : undefined
     });
   }
+  var signature = (s.stops||[]).map(function(p){return p.id+':'+p.lat+':'+p.lng}).join('|') + (s.me?'|me':'');
+  if(signature && signature !== fittedSignature){ fittedSignature=signature; window.__fit(); }
 };
 
 window.__fit = function(){
@@ -203,11 +283,18 @@ window.__fit = function(){
   var pts = (sceneRef.stops||[]).map(function(s){ return {lat:s.lat,lng:s.lng}; });
   if(sceneRef.me) pts.push(sceneRef.me);
   if(!pts.length) return;
-  if(pts.length===1){ map.setCenter(pts[0]); map.setZoom(15); return; }
+  var padding = sceneRef.padding || {top:90,right:60,bottom:80,left:60};
+  if(pts.length===1){ map.setCenter(pts[0]); map.setZoom(15); map.panBy(0,(padding.bottom-padding.top)/2); return; }
   var b = new google.maps.LatLngBounds();
   pts.forEach(function(p){ b.extend(p); });
-  map.fitBounds(b, {top:90, right:60, bottom:230, left:60});
+  map.fitBounds(b, padding);
 };
+
+var resizeTimer;
+window.addEventListener('resize', function(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function(){ window.__fit(); }, 150);
+});
 
 window.__init = function(){
   var c0 = (sceneRef && sceneRef.center) || {lat:19.4517,lng:-70.697};

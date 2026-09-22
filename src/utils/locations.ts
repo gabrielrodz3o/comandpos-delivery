@@ -1,4 +1,4 @@
-import type { AuthUser } from '@types/business';
+import type { AuthUser } from '@/types/business';
 
 /** Sucursal accesible por el rider, ya aplanada con su unidad de negocio. */
 export interface AccessibleLocation {

@@ -1,12 +1,15 @@
-import { useState, useRef, useEffect, memo, type Ref } from 'react';
+import { useState, useRef, useCallback, memo, type Ref } from 'react';
 import {
   View, Text, TextInput, Pressable, Keyboard, StatusBar, ActivityIndicator, Platform, ScrollView,
   type TextInputProps,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import Svg, { Path, Circle, Line } from 'react-native-svg';
+import { useFocusEffect, useRouter } from 'expo-router';
+import Svg, { Path, Circle } from 'react-native-svg';
+import { DeliveryMark3D } from '@components/brand/DeliveryMark3D';
+import { useBrandMotion } from '@components/brand/useBrandMotion';
+import { DELIVERY_LOGIN_MARK_SIZE, DELIVERY_LOGIN_STAGE_HEIGHT, DELIVERY_LOGIN_TOP_PADDING } from '@components/brand/layout';
 import { login } from '@services/auth';
 import { useAuthStore } from '@store/useAuthStore';
 import { showToast } from '@store/useToastStore';
@@ -56,6 +59,16 @@ const RouteMotif = () => (
 /** Hero decorativo. Memoizado: NO depende del estado del form, así no se
  *  re-renderiza (gradiente + SVGs) en cada tecla y el TextInput no pierde foco. */
 const Hero = memo(function Hero() {
+  const [focused, setFocused] = useState(false);
+  const { foreground, reducedMotion } = useBrandMotion();
+
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
+
+  const animate = focused && foreground;
+
   return (
     <LinearGradient
       colors={[c.brandDeep, c.brandMid, c.primary]}
@@ -69,11 +82,9 @@ const Hero = memo(function Hero() {
       <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 8 }}><RouteMotif /></View>
 
       <SafeAreaView edges={['top']}>
-        <View style={{ alignItems: 'center', paddingTop: 28, paddingBottom: 48, paddingHorizontal: 24 }}>
-          <View style={{ padding: 7, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)' }}>
-            <View style={{ width: 88, height: 88, borderRadius: 24, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', ...shadow.hero }}>
-              <Text style={{ fontSize: 46 }}>🛵</Text>
-            </View>
+        <View style={{ alignItems: 'center', paddingTop: DELIVERY_LOGIN_TOP_PADDING, paddingBottom: 32, paddingHorizontal: 24 }}>
+          <View style={{ height: DELIVERY_LOGIN_STAGE_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
+            <DeliveryMark3D size={DELIVERY_LOGIN_MARK_SIZE} animated={animate} reducedMotion={reducedMotion} />
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 18 }}>

@@ -7,13 +7,13 @@
  * que funcione como hijo flex en filas/grids sin envoltorios extra.
  */
 import type { ReactNode } from 'react';
-import { Pressable, type StyleProp, type ViewStyle, type GestureResponderEvent } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { Pressable, type StyleProp, type ViewStyle, type GestureResponderEvent, type AccessibilityProps } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, useReducedMotion } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-type PressProps = {
+type PressProps = AccessibilityProps & {
   children: ReactNode;
   onPress?: (e: GestureResponderEvent) => void;
   onLongPress?: (e: GestureResponderEvent) => void;
@@ -25,17 +25,21 @@ type PressProps = {
 };
 
 export function Press({
-  children, onPress, onLongPress, style, hitSlop, disabled, haptic = true, scaleTo = 0.96,
+  children, onPress, onLongPress, style, hitSlop, disabled, haptic = true, scaleTo = 0.96, ...accessibility
 }: PressProps) {
   const s = useSharedValue(1);
+  const reducedMotion = useReducedMotion();
   const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
 
   return (
     <AnimatedPressable
+      accessibilityRole="button"
+      {...accessibility}
+      accessibilityState={{...accessibility.accessibilityState, disabled}}
       disabled={disabled}
       hitSlop={hitSlop}
       style={[style, aStyle]}
-      onPressIn={() => { s.value = withSpring(scaleTo, { damping: 18, stiffness: 340, mass: 0.5 }); }}
+      onPressIn={() => { if (!reducedMotion) s.value = withSpring(scaleTo, { damping: 18, stiffness: 340, mass: 0.5 }); }}
       onPressOut={() => { s.value = withSpring(1, { damping: 14, stiffness: 260, mass: 0.5 }); }}
       onPress={(e) => {
         if (disabled) return;

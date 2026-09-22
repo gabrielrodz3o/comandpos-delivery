@@ -62,6 +62,7 @@ export const fetchDrivingRoute = async (
   apiKey: string,
   origin: LatLng,
   stops: LatLng[],
+  signal?: AbortSignal,
 ): Promise<DrivingRoute | null> => {
   if (!apiKey || stops.length < 1) return null;
 
@@ -77,8 +78,13 @@ export const fetchDrivingRoute = async (
   // Directions admite hasta 25 waypoints; el delivery siempre está muy por debajo.
   if (waypoints.length) params.set('waypoints', waypoints.map(fmt).join('|'));
 
+  if (signal?.aborted) return null;
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  signal?.addEventListener('abort', cancel);
+  const timeout = setTimeout(cancel, 20000);
   try {
-    const res = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${params.toString()}`);
+    const res = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${params.toString()}`, { signal: controller.signal });
     const json: any = await res.json();
     if (json.status !== 'OK' || !json.routes?.length) return null;
 
@@ -95,5 +101,8 @@ export const fetchDrivingRoute = async (
     return { coordinates, distanceKm, durationSec };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', cancel);
   }
 };

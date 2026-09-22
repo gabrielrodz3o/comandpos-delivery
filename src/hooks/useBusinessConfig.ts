@@ -3,9 +3,10 @@ import { AppState } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBusinessConfig } from '@services/business';
 import { useAuthStore } from '@store/useAuthStore';
+import { currentScope, sessionKey } from '@services/session';
 
 /** Query key de la config de sucursal (scopeada por locationId). */
-export const businessConfigKey = (locationId: number | null) => ['business-config', locationId];
+export const businessConfigKey = (locationId: number | null) => sessionKey(currentScope(),'business-config',locationId);
 
 /**
  * Config de la sucursal activa del rider: principalmente la google_maps_api_key
@@ -23,7 +24,7 @@ export function useBusinessConfig() {
 
   const query = useQuery({
     queryKey: businessConfigKey(locationId),
-    queryFn: () => getBusinessConfig(locationId as number),
+    queryFn: ({signal}) => getBusinessConfig(locationId as number, signal),
     enabled: !!token && locationId != null,
     staleTime: 5 * 60_000,
     refetchOnReconnect: true,

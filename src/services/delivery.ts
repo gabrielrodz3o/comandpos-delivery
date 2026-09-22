@@ -1,51 +1,137 @@
-import type { AxiosRequestConfig } from 'axios';
-import { api } from './apiClient';
-import type { MyOrdersResponse } from '@types/delivery';
+import type { AxiosRequestConfig } from "axios";
+import { api } from "./apiClient";
+import { currentScope } from "./session";
+import { useAuthStore } from "@store/useAuthStore";
+import type {
+  MyOrdersResponse,
+  DeliveryOrder,
+  RiderOperations,
+  RiderFinances,
+  INCIDENT_TYPES,
+} from "@/types/delivery";
 
-/** Órdenes del rider autenticado (scoped server-side). */
-export const getMyOrders = async (hours = 48): Promise<MyOrdersResponse> => {
-  const { data } = await api.get<MyOrdersResponse>('/api/restaurant/delivery/my-orders', {
-    params: { hours },
-  });
-  return data;
-};
-
-/** Iniciar viaje: recoge todo (picked_up_at + En camino). */
-export const pickupRoute = (opts: { routeId?: number; accountId?: number }) =>
+const base = "/api/restaurant/delivery";
+const config = (cfg: AxiosRequestConfig = {}): AxiosRequestConfig => ({
+  skipErrorToast: true,
+  deliveryScope: currentScope() || "signed-out",
+  ...cfg,
+});
+export const getMyOrders = async (
+  hours = 48,
+  signal?: AbortSignal,
+): Promise<MyOrdersResponse> =>
+  (
+    await api.get(
+      `${base}/my-orders`,
+      config({
+        signal,
+        params: { hours, location_id: useAuthStore.getState().locationId },
+      }),
+    )
+  ).data;
+export const getOrder = async (
+  id: number,
+  signal?: AbortSignal,
+): Promise<DeliveryOrder> =>
+  (await api.get(`${base}/order`, config({ signal, params: { id } }))).data
+    .data;
+export const getHistory = async (
+  params: {
+    from: string;
+    to: string;
+    offset: number;
+    search: string;
+    status: string;
+  },
+  signal?: AbortSignal,
+): Promise<{ data: DeliveryOrder[]; next_offset: number | null }> =>
+  (
+    await api.get(
+      `${base}/history`,
+      config({
+        signal,
+        params: { ...params, location_id: useAuthStore.getState().locationId },
+      }),
+    )
+  ).data;
+export const getOperations = async (
+  signal?: AbortSignal,
+): Promise<RiderOperations> =>
+  (await api.get(`${base}/operations/status`, config({ signal }))).data.data;
+export const getFinances = async (
+  signal?: AbortSignal,
+): Promise<RiderFinances> =>
+  (
+    await api.get(
+      `${base}/my-finances`,
+      config({
+        signal,
+        params: { location_id: useAuthStore.getState().locationId },
+      }),
+    )
+  ).data.data;
+export const pickupRoute = (
+  opts: { routeId?: number; accountId?: number },
+  cfg?: AxiosRequestConfig,
+) =>
   api
-    .post('/api/restaurant/delivery/route/pickup', { route_id: opts.routeId, account_id: opts.accountId })
+    .post(
+      `${base}/route/pickup`,
+      { route_id: opts.routeId, account_id: opts.accountId },
+      config(cfg),
+    )
     .then((r) => r.data);
-
-/** Agrupar órdenes ya asignadas en un viaje (al vuelo). */
 export const groupMine = (accountIds: number[]) =>
-  api.post('/api/restaurant/delivery/route/group-mine', { account_ids: accountIds }).then((r) => r.data);
-
-/** Guardar la secuencia óptima de paradas. */
+  api
+    .post(`${base}/route/group-mine`, { account_ids: accountIds }, config())
+    .then((r) => r.data);
 export const optimizeRoute = (
   routeId: number,
   stops: { account_id: number; order: number }[],
   totals?: { total_distance_km?: number; total_duration_seconds?: number },
-) => api.post('/api/restaurant/delivery/route/optimize', { route_id: routeId, stops, ...totals }).then((r) => r.data);
-
-/** Cambiar estado de una orden (ej. 5→6 En camino). */
-export const changeStatus = (accountId: number, statusId: number, cfg?: AxiosRequestConfig) =>
+) =>
   api
-    .post('/api/restaurant/tables/update-account-status', {
-      account_id: accountId,
-      status_tracker_id: statusId,
-    }, cfg)
+    .post(
+      `${base}/route/optimize`,
+      { route_id: routeId, stops, ...totals },
+      config(),
+    )
     .then((r) => r.data);
-
-/** Marcar entregada (status 7). */
-export const markDelivered = (accountId: number, locationId: number, userId: number, cfg?: AxiosRequestConfig) =>
+export const markDelivered = (
+  accountId: number,
+  recipientName?: string,
+  cfg?: AxiosRequestConfig,
+) =>
   api
-    .post('/api/restaurant/order/mark-delivery-completed', {
-      account_id: accountId,
-      location_id: locationId,
-      user_id: userId,
-    }, cfg)
+    .post(
+      `${base}/complete`,
+      { account_id: accountId, recipient_name: recipientName },
+      config(cfg),
+    )
     .then((r) => r.data);
-
-/** Disponibilidad del rider (recibir / no recibir nuevos pedidos). */
-export const setAvailability = (accepting: boolean, cfg?: AxiosRequestConfig) =>
-  api.post('/api/restaurant/delivery/availability', { accepting }, cfg).then((r) => r.data);
+export const reportPresence = (
+  active: boolean,
+  requestId: string,
+  cfg?: AxiosRequestConfig,
+) =>
+  api
+    .post(
+      `${base}/operations/presence`,
+      { active, request_id: requestId },
+      config(cfg),
+    )
+    .then((r) => r.data);
+export const reportArrival = () =>
+  api.post(`${base}/operations/arrival`, {}, config()).then((r) => r.data);
+export const reportIncident = (
+  accountId: number,
+  type: keyof typeof INCIDENT_TYPES,
+  notes: string,
+) =>
+  api
+    .post(
+      `${base}/incidents`,
+      { account_id: accountId, incident_type: type, notes },
+      config(),
+    )
+    .then((r) => r.data);
