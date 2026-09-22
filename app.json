@@ -40,7 +40,16 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-location",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Usamos tu ubicación para calcular la ruta y el origen de tus entregas.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
       "expo-notifications",
       [
         "expo-splash-screen",
