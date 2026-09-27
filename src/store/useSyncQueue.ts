@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { queueStorage } from "@services/queueStorage";
 
-export type QueuedKind = "markDelivered" | "presence";
+export type QueuedKind = "markDelivered" | "presence" | "incident" | "arrival";
 export interface QueueItem {
   id: string;
   kind: QueuedKind;
@@ -61,7 +61,7 @@ export const useSyncQueue = create<SyncState>()(
     {
       name: "comandpos-delivery-syncqueue",
       version: 2,
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => queueStorage),
       partialize: (s) => ({ items: s.items }),
       // Legacy operations have no verifiable owner. Preserve for support, never replay.
       migrate: (old: any) => ({

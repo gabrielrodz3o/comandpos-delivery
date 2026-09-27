@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, FlatList, RefreshControl } from "react-native";
+import { View, Text, FlatList, RefreshControl, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { customDateRange } from "@utils/operations";
 import { getHistory } from "@services/delivery";
 import { currentScope, sessionKey } from "@services/session";
 import { useAuthStore } from "@store/useAuthStore";
@@ -19,6 +20,9 @@ import { useMyOrders } from "@hooks/useMyOrders";
 import { PageHeading } from "@components/ui/DeliveryDesign";
 import { IcReceipt, IcClock } from "@components/ui/icons";
 export default function HistoryScreen() {
+  const router = useRouter();
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const insets = useSafeAreaInsets();
   const { token } = useAuthStore();
   const scope = currentScope();
@@ -33,20 +37,21 @@ export default function HistoryScreen() {
   }, [search]);
   const today = new Date().toDateString();
   const range = useMemo(() => {
+    if (days === "custom") return customDateRange(from, to);
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     start.setDate(start.getDate() - (Number(days) - 1));
     const end = new Date();
     end.setHours(24, 0, 0, 0);
     return { from: start.toISOString(), to: end.toISOString() };
-  }, [days, today]);
+  }, [days, today, from, to]);
   const query = useInfiniteQuery({
     queryKey: sessionKey(scope, "history", range, filter, term),
-    enabled: !!token,
+    enabled: !!token && !!range,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
       getHistory(
-        { ...range, offset: pageParam, search: term, status: filter },
+        { ...range!, offset: pageParam, search: term, status: filter },
         signal,
       ),
     getNextPageParam: (last) => last.next_offset ?? undefined,
@@ -55,11 +60,12 @@ export default function HistoryScreen() {
   // sin esto, una entrega recién completada no aparece hasta hacer pull-to-refresh.
   useFocusEffect(
     useCallback(() => {
-      void query.refetch();
-    }, [query.refetch]),
+      if (range) void query.refetch();
+    }, [query.refetch, range]),
   );
   const localDeliveries = operational.orders.filter(
     (o) =>
+      !!range &&
       o.pending_sync &&
       ["all", "delivered"].includes(filter) &&
       matchesSearch(o, term) &&
@@ -94,11 +100,18 @@ export default function HistoryScreen() {
         refreshControl={
           <RefreshControl
             refreshing={query.isRefetching && !query.isFetchingNextPage}
-            onRefresh={() => void query.refetch()}
+            onRefresh={() => {
+              if (range) void query.refetch();
+            }}
           />
         }
         ListHeaderComponent={
           <View style={{ gap: 14, marginBottom: 4 }}>
+            <Button
+              secondary
+              label="Volver a mis pedidos"
+              onPress={() => router.replace("/(tabs)/orders")}
+            />
             <Chips
               value={days}
               onChange={setDays}
@@ -106,8 +119,51 @@ export default function HistoryScreen() {
                 { id: "1", label: "Hoy" },
                 { id: "7", label: "7 días" },
                 { id: "30", label: "30 días" },
+                { id: "custom", label: "Elegir fechas" },
               ]}
             />
+            {days === "custom" && (
+              <View style={ui.card}>
+                <Text style={ui.body}>Desde (AAAA-MM-DD)</Text>
+                <TextInput
+                  style={ui.input}
+                  accessibilityLabel="Fecha inicial"
+                  value={from}
+                  onChangeText={setFrom}
+                  placeholder="2026-09-01"
+                  maxLength={10}
+                  keyboardType="numbers-and-punctuation"
+                />
+                <Text style={ui.body}>Hasta (AAAA-MM-DD)</Text>
+                <TextInput
+                  style={ui.input}
+                  accessibilityLabel="Fecha final"
+                  value={to}
+                  onChangeText={setTo}
+                  placeholder="2026-09-30"
+                  maxLength={10}
+                  keyboardType="numbers-and-punctuation"
+                />
+                {!range && (
+                  <Text style={ui.muted}>
+                    Introduce fechas válidas, en orden, con un intervalo máximo
+                    de un año.
+                  </Text>
+                )}
+              </View>
+            )}
+            {query.data && (
+              <Text style={ui.body}>
+                {orders.filter((o) => o.status_tracker_id === 7).length}{" "}
+                entregas ·{" "}
+                {
+                  orders.filter((o) =>
+                    [8, 9, 10, 11].includes(o.status_tracker_id),
+                  ).length
+                }{" "}
+                cancelaciones en los resultados cargados
+              </Text>
+            )}
             <SearchField value={search} onChangeText={setSearch} />
             <Chips
               value={filter}
@@ -148,7 +204,9 @@ export default function HistoryScreen() {
               loading={query.isLoading}
               error={query.error}
               stale={!!query.data}
-              onRetry={() => void query.refetch()}
+              onRetry={() => {
+                if (range) void query.refetch();
+              }}
             />
           </View>
         }

@@ -28,6 +28,7 @@ export interface DeliveryBusinessConfig {
   business_unit_id: number;
   business_unit_name?: string | null;
   google_maps_api_key: string | null;
+  directions_available?: boolean;
   color?: string | null;
 }
 
@@ -40,6 +41,11 @@ export interface AuthUser {
   per_description?: string;
   acess_locations?: number[];
   business_units_with_access?: AuthBusinessUnit[];
-  type_access?: Array<{ access?: { access_profile_id?: number; access_profile_description?: string } }>;
+  type_access?: Array<{
+    access?: {
+      access_profile_id?: number;
+      access_profile_description?: string;
+    };
+  }>;
   [key: string]: unknown;
 }

@@ -70,7 +70,7 @@ export const ui = StyleSheet.create({
     letterSpacing: -0.3,
   },
   body: { fontSize: 14, color: c.text, lineHeight: 21 },
-  muted: { fontSize: 12, color: c.textDim, lineHeight: 18 },
+  muted: { fontSize: 14, color: c.textDim, lineHeight: 18 },
   amount: {
     fontSize: 25,
     fontWeight: "800",
@@ -172,7 +172,7 @@ export function Badge({
         backgroundColor: `${color}12`,
       }}
     >
-      <Text style={{ color, fontSize: 11, fontWeight: "800" }}>{label}</Text>
+      <Text style={{ color, fontSize: 13, fontWeight: "800" }}>{label}</Text>
     </View>
   );
 }
@@ -259,7 +259,7 @@ export function Chips({
         >
           <Text
             style={{
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: "800",
               color: value === item.id ? "#FFFFFF" : c.textDim,
             }}
@@ -277,12 +277,14 @@ export function QueryNotice({
   onRetry,
   empty,
   stale,
+  emptyHint = "Prueba otro filtro o actualiza la información.",
 }: {
   loading?: boolean;
   error?: unknown;
   onRetry?: () => void;
   empty?: string;
   stale?: boolean;
+  emptyHint?: string;
 }) {
   if (loading)
     return (
@@ -338,7 +340,7 @@ export function QueryNotice({
           {empty}
         </Text>
         <Text style={[ui.muted, { textAlign: "center", maxWidth: 245 }]}>
-          Las órdenes que coincidan con esta vista aparecerán aquí.
+          {emptyHint}
         </Text>
       </View>
     );
@@ -417,7 +419,9 @@ export function OrderCard({
         <View style={ui.divider} />
         <View style={ui.between}>
           <View style={{ flex: 1 }}>
-            <Text style={ui.muted}>{collectionLabel(order)}</Text>
+            <Text style={ui.muted}>
+              {history ? "Total del pedido" : collectionLabel(order)}
+            </Text>
             <Text
               style={[
                 ui.body,

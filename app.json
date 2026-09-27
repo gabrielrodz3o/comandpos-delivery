@@ -18,10 +18,9 @@
       "bundleIdentifier": "com.comandpos.delivery",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Usamos tu ubicación para calcular la ruta y el origen de tus entregas.",
-        "UIBackgroundModes": [
-          "remote-notification"
-        ],
-        "ITSAppUsesNonExemptEncryption": false
+        "UIBackgroundModes": ["remote-notification", "location"],
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Con tu autorización, compartimos ubicación con despacho únicamente durante un viaje activo, incluso con la app en segundo plano."
       }
     },
     "android": {
@@ -44,10 +43,11 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Usamos tu ubicación para calcular la ruta y el origen de tus entregas.",
-          "locationAlwaysAndWhenInUsePermission": false,
-          "locationAlwaysPermission": false,
-          "isIosBackgroundLocationEnabled": false,
-          "isAndroidBackgroundLocationEnabled": false
+          "locationAlwaysAndWhenInUsePermission": "Comparte tu ubicación con despacho durante un viaje activo.",
+          "locationAlwaysPermission": "Comparte tu ubicación durante tus entregas.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "expo-notifications",
@@ -67,6 +67,15 @@
             "compileSdkVersion": 35,
             "targetSdkVersion": 35
           }
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": false,
+          "cameraPermission": "Toma una foto del paquete entregado como constancia.",
+          "microphonePermission": false
         }
       ]
     ],

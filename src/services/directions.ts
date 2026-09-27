@@ -1,28 +1,16 @@
-/**
- * Google Directions API — ruteo por calles para el mapa del rider.
- *
- * Usa la `google_maps_api_key` de la unidad de negocio (ver useBusinessConfig).
- * El consumo se cobra a la cuenta de Google de cada negocio. Si no hay key,
- * falla la red o la respuesta no es OK, devuelve null → el mapa cae al
- * trazo recto (haversine) sin romperse.
- *
- * Requisito en Google Cloud de cada negocio: "Directions API" habilitada y la
- * key sin restricción de app (o restringida a Directions API).
- */
-
+import { api } from "./apiClient";
+import { currentScope } from "./session";
+import { useAuthStore } from "@store/useAuthStore";
 export interface LatLng {
   latitude: number;
   longitude: number;
 }
-
 export interface DrivingRoute {
-  /** Geometría de la ruta (overview_polyline decodificada). */
   coordinates: LatLng[];
   distanceKm: number;
   durationSec: number;
+  accountIds: number[];
 }
-
-/** Decodifica un encoded polyline de Google a coordenadas. */
 const decodePolyline = (encoded: string): LatLng[] => {
   const pts: LatLng[] = [];
   let index = 0;
@@ -51,58 +39,33 @@ const decodePolyline = (encoded: string): LatLng[] => {
   return pts;
 };
 
-const fmt = (p: LatLng) => `${p.latitude},${p.longitude}`;
-
-/**
- * Pide a Directions la ruta `origin → ...stops` respetando el orden recibido
- * (NO reordena: el orden ya lo decide la app con nearestNeighbor). Devuelve la
- * geometría por calles + distancia/duración totales, o null si no se pudo.
- */
-export const fetchDrivingRoute = async (
-  apiKey: string,
+/** Authenticated backend proxy calculates routes; the map uses its browser key separately. */
+export async function fetchDrivingRoute(
   origin: LatLng,
-  stops: LatLng[],
+  accountIds: number[],
   signal?: AbortSignal,
-): Promise<DrivingRoute | null> => {
-  if (!apiKey || stops.length < 1) return null;
-
-  const destination = stops[stops.length - 1];
-  const waypoints = stops.slice(0, -1);
-
-  const params = new URLSearchParams({
-    origin: fmt(origin),
-    destination: fmt(destination),
-    mode: 'driving',
-    key: apiKey,
-  });
-  // Directions admite hasta 25 waypoints; el delivery siempre está muy por debajo.
-  if (waypoints.length) params.set('waypoints', waypoints.map(fmt).join('|'));
-
-  if (signal?.aborted) return null;
-  const controller = new AbortController();
-  const cancel = () => controller.abort();
-  signal?.addEventListener('abort', cancel);
-  const timeout = setTimeout(cancel, 20000);
-  try {
-    const res = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${params.toString()}`, { signal: controller.signal });
-    const json: any = await res.json();
-    if (json.status !== 'OK' || !json.routes?.length) return null;
-
-    const route = json.routes[0];
-    const coordinates = decodePolyline(route.overview_polyline?.points ?? '');
-    if (!coordinates.length) return null;
-
-    let distanceKm = 0;
-    let durationSec = 0;
-    for (const leg of route.legs ?? []) {
-      distanceKm += (leg.distance?.value ?? 0) / 1000;
-      durationSec += leg.duration?.value ?? 0;
-    }
-    return { coordinates, distanceKm, durationSec };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-    signal?.removeEventListener('abort', cancel);
-  }
-};
+  optimize = false,
+): Promise<DrivingRoute | null> {
+  if (!accountIds.length) return null;
+  const { data } = await api.post(
+    "/api/restaurant/delivery/directions",
+    {
+      location_id: useAuthStore.getState().locationId,
+      origin,
+      account_ids: accountIds,
+      optimize,
+    },
+    {
+      signal,
+      deliveryScope: currentScope() || "signed-out",
+      skipErrorToast: true,
+    },
+  );
+  if (!data.data) return null;
+  return {
+    coordinates: decodePolyline(data.data.polyline),
+    distanceKm: data.data.distanceKm,
+    durationSec: data.data.durationSec,
+    accountIds: data.data.account_ids,
+  };
+}

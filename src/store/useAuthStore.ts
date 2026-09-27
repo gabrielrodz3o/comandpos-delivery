@@ -1,7 +1,7 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AuthUser } from '@/types/business';
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { secureAuthStorage } from "@services/secureAuthStorage";
+import type { AuthUser } from "@/types/business";
 
 // URL del backend Nuxt (restaurante-comandpos). Por defecto apunta a
 // producción. En dev, sobreescribir con EXPO_PUBLIC_API_URL apuntando a la
@@ -9,7 +9,7 @@ import type { AuthUser } from '@/types/business';
 // usar localhost).
 const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || undefined;
 // Producción. EXPO_PUBLIC_API_URL la sobreescribe (para dev contra LAN).
-export const DEFAULT_API_BASE_URL = ENV_API_URL ?? 'https://api.comandpos.com';
+export const DEFAULT_API_BASE_URL = ENV_API_URL ?? "https://api.comandpos.com";
 
 interface AuthState {
   apiBaseUrl: string | null;
@@ -42,8 +42,8 @@ export const useAuthStore = create<AuthState>()(
       setHydrated: () => set({ hydrated: true }),
     }),
     {
-      name: 'comandpos-delivery-auth',
-      storage: createJSONStorage(() => AsyncStorage),
+      name: "comandpos-delivery-auth",
+      storage: createJSONStorage(() => secureAuthStorage),
       partialize: (state) => ({
         apiBaseUrl: state.apiBaseUrl,
         token: state.token,

@@ -1,3 +1,4 @@
+import { useConfirmation } from "@hooks/useConfirmation";
 import { useState } from "react";
 import {
   View,
@@ -5,6 +6,7 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  Image,
   RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,14 +14,18 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getOrder,
+  getDeliveryPhoto,
   pickupRoute,
   groupMine,
-  reportIncident,
 } from "@services/delivery";
-import { currentScope, sessionKey } from "@services/session";
+import { currentScope, sessionKey, ordersKey } from "@services/session";
 import { useAuthStore } from "@store/useAuthStore";
 import { useSyncQueue } from "@store/useSyncQueue";
-import { queueMarkDelivered, applyPending } from "@services/sync";
+import {
+  queueMarkDelivered,
+  applyPending,
+  queueIncident,
+} from "@services/sync";
 import { showToast } from "@store/useToastStore";
 import {
   ui,
@@ -38,22 +44,50 @@ import {
 } from "@utils/delivery";
 import { navigateOrder, phoneDigits, openLink } from "@utils/contact";
 import { STATUS_META, INCIDENT_TYPES } from "@/types/delivery";
+import {
+  canRecordOffline,
+  amountInput,
+  collectionTotal,
+} from "@utils/operations";
+import { takeDeliveryPhoto } from "@services/photoEvidence";
+import { captureDeliveryLocation } from "@services/evidence";
+import { CollectionForm, emptyCollection } from "@components/ui/CollectionForm";
+import { IncidentList } from "@components/ui/IncidentList";
+import { useRiderOperations } from "@hooks/useRiderOperations";
+import type { CompletionDetails, MyOrdersResponse } from "@/types/delivery";
 import { palette } from "@theme/colors";
 const c = palette.dark;
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { confirm, dialog } = useConfirmation();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { token } = useAuthStore();
   const scope = currentScope();
+  const operations = useRiderOperations();
+  const [collection, setCollection] = useState(emptyCollection);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const items = useSyncQueue((s) => s.items);
   const query = useQuery({
     queryKey: sessionKey(scope, "order", id),
     queryFn: ({ signal }) => getOrder(Number(id), signal),
     enabled: !!token && Number(id) > 0,
+    initialData: () =>
+      qc
+        .getQueryData<MyOrdersResponse>(ordersKey(scope))
+        ?.data.find((o) => o.id === Number(id)),
+    initialDataUpdatedAt: () =>
+      qc.getQueryState(ordersKey(scope))?.dataUpdatedAt,
   });
   const order = query.data ? applyPending([query.data], items, scope)[0] : null;
+  const [photo, setPhoto] = useState<string | null>(null);
+  const photoQuery = useQuery({
+    queryKey: sessionKey(scope, "proof", id),
+    queryFn: ({ signal }) => getDeliveryPhoto(Number(id), signal),
+    enabled: !!token && !!query.data?.has_photo,
+    meta: { persist: false },
+  });
   const [busy, setBusy] = useState(false);
   const [recipient, setRecipient] = useState("");
   const [incidentOpen, setIncidentOpen] = useState(false);
@@ -102,11 +136,11 @@ export default function OrderDetail() {
   const phone = phoneDigits(order.delivery_phone);
   const state = STATUS_META[order.status_tracker_id];
   const pickup = () =>
-    Alert.alert(
+    confirm(
       "Confirmar recogida",
       order.delivery_route_id
-        ? "Se iniciará el viaje y se registrará la recogida de sus órdenes listas. Confirma que las llevas contigo."
-        : "Confirma que recogiste esta orden en la sucursal.",
+        ? "Se iniciará el viaje y se registrará la recogida de sus órdenes listas. Verifica cada pedido, bolsas, bebidas y observaciones antes de salir."
+        : "Verifica pedido, bolsas, bebidas y observaciones antes de confirmar que lo llevas contigo.",
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -129,6 +163,12 @@ export default function OrderDetail() {
       ],
     );
   const deliver = () => {
+    if (!canRecordOffline(query.error))
+      return showToast({
+        message:
+          "El pedido cambió o ya no está disponible. Actualiza antes de confirmar.",
+        variant: "warning",
+      });
     if (order.proof_of_delivery_enabled && recipient.trim().length < 2)
       return showToast({
         message: "Indica el nombre de quien recibió el pedido.",
@@ -139,22 +179,65 @@ export default function OrderDetail() {
         message: "Confirma el importe con caja antes de cerrar la entrega.",
         variant: "warning",
       });
-    Alert.alert(
+    let declaration: CompletionDetails["collection"];
+    if (
+      order.rider_collection_id &&
+      due != null &&
+      operations.data?.capabilities?.completion_details
+    ) {
+      const cash = amountInput(collection.cash),
+        card = amountInput(collection.card),
+        transfer = amountInput(collection.transfer),
+        other = amountInput(collection.other);
+      if (cash === null || card === null || transfer === null || other === null)
+        return showToast({
+          message:
+            "Completa los importes recibidos con un máximo de dos decimales.",
+          variant: "warning",
+        });
+      declaration = {
+        cash,
+        card,
+        transfer,
+        other,
+        notes: collection.notes.trim(),
+        expected_amount: due,
+        currency_code: order.currency_code || "DOP",
+      };
+      if (
+        Math.abs(collectionTotal(declaration) - due) > 0.009 &&
+        !declaration.notes
+      )
+        return showToast({
+          message: "Explica la diferencia del cobro para caja.",
+          variant: "warning",
+        });
+    }
+    const occurredAt = new Date().toISOString();
+    confirm(
       "Confirmar entrega",
       due != null && due > 0
-        ? `Confirma que entregaste el pedido y recibiste ${money(due, order.currency_code)}. Medio indicado por caja: ${order.expected_payment_type_name || "por confirmar"}.`
+        ? `Confirma que entregaste el pedido. ${declaration ? `Cobro declarado: ${money(collectionTotal(declaration), order.currency_code)}.` : `Importe esperado: ${money(due, order.currency_code)}. Caja verificará el cobro.`}`
         : "Confirma que entregaste el pedido al cliente.",
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text:
-            due != null && due > 0 ? "Cobré y entregué" : "Confirmar entrega",
+          text: declaration ? "Guardar cobro y entrega" : "Confirmar entrega",
           onPress: async () => {
             setBusy(true);
             try {
+              const evidence = await captureDeliveryLocation();
+              if (currentScope() !== scope)
+                throw new Error("La sesión cambió. Abre nuevamente el pedido.");
               const result = await queueMarkDelivered(
                 order,
                 recipient.trim() || undefined,
+                {
+                  ...evidence,
+                  occurred_at: occurredAt,
+                  collection: declaration,
+                  photo_base64: photo || undefined,
+                },
               );
               if (!result.queued)
                 showToast({
@@ -276,34 +359,79 @@ export default function OrderDetail() {
           {Array.isArray(order.payment_breakdown) &&
             order.payment_breakdown.length > 1 && (
               <Text style={ui.muted}>
-                Pago combinado. Confirma con caja el desglose antes de cobrar.
+                Pago combinado:{" "}
+                {order.payment_breakdown
+                  .map(
+                    (p) =>
+                      `${money(p.amount, order.currency_code)} (medio #${p.payment_type_id})`,
+                  )
+                  .join(" + ")}
+                .
               </Text>
             )}
           <Text style={ui.muted}>
             Caja confirma el cobro y la liquidación. El fondo de cambio se
-            consulta en Cuenta.
+            consulta en Mi dinero.
           </Text>
         </View>
-        <View style={ui.card}>
-          <Text style={ui.sectionTitle}>Seguimiento</Text>
-          <Text style={ui.body}>
-            Asignada: {dateTime(order.driver_assigned_at)}
-          </Text>
-          <Text style={ui.body}>
-            Recogida:{" "}
-            {order.picked_up_at ? dateTime(order.picked_up_at) : "Pendiente"}
-          </Text>
-          <Text style={ui.body}>
-            Entregada:{" "}
-            {order.completed_at ? dateTime(order.completed_at) : "Pendiente"}
-          </Text>
-          {order.delivery_route_id && (
-            <Text style={ui.muted}>
-              Viaje #{order.delivery_route_id} · Parada{" "}
-              {order.delivery_route_order || "por definir"}
-            </Text>
+        {order.status_tracker_id === 6 &&
+          order.rider_collection_id &&
+          due != null &&
+          operations.data?.capabilities?.completion_details && (
+            <CollectionForm
+              value={collection}
+              onChange={setCollection}
+              due={due}
+              currency={order.currency_code || "DOP"}
+            />
           )}
-        </View>
+        {!!order.completion_declaration?.collection && (
+          <View style={ui.card}>
+            <Text style={ui.sectionTitle}>Cobro declarado</Text>
+            <Text style={ui.amount}>
+              {money(
+                collectionTotal(order.completion_declaration.collection),
+                order.currency_code,
+              )}
+            </Text>
+            <Text style={ui.body}>
+              {order.completion_declaration.collection.notes}
+            </Text>
+            <Text style={ui.muted}>
+              Pendiente de validación contable por caja.
+            </Text>
+          </View>
+        )}
+        <Button
+          secondary
+          label={
+            timelineOpen ? "Ocultar seguimiento" : "Ver seguimiento del pedido"
+          }
+          onPress={() => setTimelineOpen((v) => !v)}
+        />
+        {timelineOpen && (
+          <View style={ui.card}>
+            <Text style={ui.sectionTitle}>Seguimiento</Text>
+            <Text style={ui.body}>
+              Asignada: {dateTime(order.driver_assigned_at)}
+            </Text>
+            <Text style={ui.body}>
+              Recogida:{" "}
+              {order.picked_up_at ? dateTime(order.picked_up_at) : "Pendiente"}
+            </Text>
+            <Text style={ui.body}>
+              Entregada:{" "}
+              {order.completed_at ? dateTime(order.completed_at) : "Pendiente"}
+            </Text>
+            {order.delivery_route_id && (
+              <Text style={ui.muted}>
+                Viaje #{order.delivery_route_id} · Parada{" "}
+                {order.delivery_route_order || "por definir"}
+              </Text>
+            )}
+          </View>
+        )}
+        {!!order.incidents?.length && <IncidentList items={order.incidents} />}
         {isActive(order) && (
           <View style={ui.card}>
             <Text style={ui.sectionTitle}>
@@ -316,7 +444,7 @@ export default function OrderDetail() {
             <Button
               secondary
               label={incidentOpen ? "Cerrar reporte" : "Reportar incidencia"}
-              disabled={busy}
+              disabled={busy || !operations.data?.capabilities?.incidents}
               onPress={() => setIncidentOpen((v) => !v)}
             />
             {incidentOpen && (
@@ -350,14 +478,14 @@ export default function OrderDetail() {
                   disabled={notes.trim().length < 3}
                   onPress={() =>
                     void execute(async () => {
-                      await reportIncident(
+                      const result = await queueIncident(
                         order.id,
                         incidentType,
                         notes.trim(),
                       );
                       setNotes("");
                       setIncidentOpen(false);
-                    }, "Incidencia enviada a caja.")
+                    }, "Reporte guardado. Consulta su estado en Incidencias.")
                   }
                 />
               </>
@@ -381,6 +509,58 @@ export default function OrderDetail() {
             />
           </View>
         )}
+        {order.status_tracker_id === 6 &&
+          operations.data?.capabilities?.photo_evidence && (
+            <View style={ui.card}>
+              <Text style={ui.sectionTitle}>Foto de entrega · opcional</Text>
+              <Text style={ui.muted}>
+                Fotografía el paquete entregado. Evita incluir rostros o
+                documentos del cliente.
+              </Text>
+              {photo && (
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${photo}` }}
+                  style={{ height: 180, borderRadius: 12 }}
+                  resizeMode="contain"
+                  accessibilityLabel="Foto de la entrega pendiente de enviar"
+                />
+              )}
+              <Button
+                secondary
+                label={photo ? "Tomar otra foto" : "Tomar foto del paquete"}
+                busy={busy}
+                onPress={() => {
+                  setBusy(true);
+                  void takeDeliveryPhoto()
+                    .then((value) => {
+                      if (value && currentScope() === scope) setPhoto(value);
+                    })
+                    .catch((e) =>
+                      showToast({ message: e.message, variant: "warning" }),
+                    )
+                    .finally(() => setBusy(false));
+                }}
+              />
+              {photo && (
+                <Button
+                  secondary
+                  label="Quitar foto"
+                  onPress={() => setPhoto(null)}
+                />
+              )}
+            </View>
+          )}
+        {!!photoQuery.data && (
+          <View style={ui.card}>
+            <Text style={ui.sectionTitle}>Constancia fotográfica</Text>
+            <Image
+              source={{ uri: photoQuery.data }}
+              style={{ height: 220, borderRadius: 12 }}
+              resizeMode="contain"
+              accessibilityLabel="Constancia de entrega registrada"
+            />
+          </View>
+        )}
         {pending && (
           <View style={ui.card}>
             <Text style={ui.body}>
@@ -400,6 +580,19 @@ export default function OrderDetail() {
             backgroundColor: c.surface,
           }}
         >
+          {!!query.error &&
+            canRecordOffline(query.error) &&
+            order.status_tracker_id === 6 && (
+              <Text style={ui.muted}>
+                La entrega se guardará en este teléfono hasta recibir
+                confirmación del servidor.
+              </Text>
+            )}
+          {!!query.error && !canRecordOffline(query.error) && (
+            <Text style={ui.muted}>
+              Actualiza el pedido o consulta a caja para resolver el bloqueo.
+            </Text>
+          )}
           <Button
             label={
               order.status_tracker_id === 6
@@ -407,11 +600,17 @@ export default function OrderDetail() {
                 : "Confirmar recogida"
             }
             busy={busy}
-            disabled={pending || !!query.error}
+            disabled={
+              pending ||
+              (order.status_tracker_id === 6
+                ? !canRecordOffline(query.error)
+                : !!query.error)
+            }
             onPress={order.status_tracker_id === 6 ? deliver : pickup}
           />
         </View>
       )}
+      {dialog}
     </View>
   );
 }

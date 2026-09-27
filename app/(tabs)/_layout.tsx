@@ -2,7 +2,13 @@ import { Tabs, Redirect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { palette } from "@theme/colors";
 import { useAuthStore } from "@store/useAuthStore";
-import { IcBike, IcMapPin, IcReceipt, IcUser } from "@components/ui/icons";
+import {
+  IcBike,
+  IcMapPin,
+  IcReceipt,
+  IcUser,
+  IcWallet,
+} from "@components/ui/icons";
 import { View } from "react-native";
 import type { ReactNode } from "react";
 
@@ -39,7 +45,7 @@ export default function TabsLayout() {
           elevation: 12,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: "800",
           letterSpacing: 0.1,
           marginTop: 3,
@@ -61,7 +67,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="map"
         options={{
-          title: "Mapa",
+          title: "Ruta",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon active={focused}>
               <IcMapPin
@@ -74,12 +80,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="money"
         options={{
-          title: "Historial",
+          title: "Mi dinero",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon active={focused}>
-              <IcReceipt
+              <IcWallet
                 size={23}
                 color={color}
                 strokeWidth={focused ? 2 : 1.8}
@@ -88,6 +94,7 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="history" options={{ href: null }} />
       <Tabs.Screen
         name="account"
         options={{

@@ -8,6 +8,9 @@ import type {
   RiderOperations,
   RiderFinances,
   INCIDENT_TYPES,
+  CompletionDetails,
+  DeliveryIncident,
+  RiderSettlement,
 } from "@/types/delivery";
 
 const base = "/api/restaurant/delivery";
@@ -101,11 +104,12 @@ export const markDelivered = (
   accountId: number,
   recipientName?: string,
   cfg?: AxiosRequestConfig,
+  details?: CompletionDetails,
 ) =>
   api
     .post(
       `${base}/complete`,
-      { account_id: accountId, recipient_name: recipientName },
+      { ...details, account_id: accountId, recipient_name: recipientName },
       config(cfg),
     )
     .then((r) => r.data);
@@ -121,17 +125,63 @@ export const reportPresence = (
       config(cfg),
     )
     .then((r) => r.data);
-export const reportArrival = () =>
-  api.post(`${base}/operations/arrival`, {}, config()).then((r) => r.data);
+export const reportArrival = (requestId?: string, cfg?: AxiosRequestConfig) =>
+  api
+    .post(`${base}/operations/arrival`, { request_id: requestId }, config(cfg))
+    .then((r) => r.data);
 export const reportIncident = (
   accountId: number,
   type: keyof typeof INCIDENT_TYPES,
   notes: string,
+  requestId?: string,
+  cfg?: AxiosRequestConfig,
 ) =>
   api
     .post(
       `${base}/incidents`,
-      { account_id: accountId, incident_type: type, notes },
-      config(),
+      {
+        account_id: accountId,
+        incident_type: type,
+        notes,
+        request_id: requestId,
+      },
+      config(cfg),
     )
     .then((r) => r.data);
+
+export const getIncidents = async (
+  signal?: AbortSignal,
+): Promise<{ data: DeliveryIncident[]; open_count: number }> =>
+  (
+    await api.get(
+      `${base}/incidents`,
+      config({
+        signal,
+        params: { location_id: useAuthStore.getState().locationId },
+      }),
+    )
+  ).data;
+export const getSettlements = async (
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<{ data: RiderSettlement[]; next_offset: number | null }> =>
+  (
+    await api.get(
+      `${base}/my-settlements`,
+      config({
+        signal,
+        params: { offset, location_id: useAuthStore.getState().locationId },
+      }),
+    )
+  ).data;
+
+export const getDeliveryPhoto = async (
+  id: number,
+  signal?: AbortSignal,
+): Promise<string | null> =>
+  (
+    await api.get(
+      `${base}/proof`,
+      config({ signal, params: { account_id: id } }),
+    )
+  ).data.data.photo;

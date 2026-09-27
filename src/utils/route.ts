@@ -33,3 +33,11 @@ export function nearbyOrder(start: Point, stops: DeliveryOrder[]) {
   }
   return out;
 }
+
+/** Oldest ready/assigned order first; missing timestamps are placed last. */
+export function oldestFirst(stops: DeliveryOrder[]) {
+  const time = (o: DeliveryOrder) =>
+    Date.parse(o.ready_at || o.driver_assigned_at || o.created_at || "") ||
+    Number.MAX_SAFE_INTEGER;
+  return [...stops].sort((a, b) => time(a) - time(b) || a.id - b.id);
+}

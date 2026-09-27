@@ -1,20 +1,36 @@
-import { useState, useRef, useCallback, memo, type Ref } from 'react';
+import { useState, useRef, useCallback, memo, type Ref } from "react";
 import {
-  View, Text, TextInput, Pressable, Keyboard, StatusBar, ActivityIndicator, Platform, ScrollView,
+  Alert,
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  Keyboard,
+  StatusBar,
+  ActivityIndicator,
+  Platform,
+  ScrollView,
   type TextInputProps,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useRouter } from 'expo-router';
-import Svg, { Path, Circle } from 'react-native-svg';
-import { DeliveryMark3D } from '@components/brand/DeliveryMark3D';
-import { useBrandMotion } from '@components/brand/useBrandMotion';
-import { DELIVERY_LOGIN_MARK_SIZE, DELIVERY_LOGIN_STAGE_HEIGHT, DELIVERY_LOGIN_TOP_PADDING } from '@components/brand/layout';
-import { login } from '@services/auth';
-import { useAuthStore } from '@store/useAuthStore';
-import { showToast } from '@store/useToastStore';
-import { accessibleLocations } from '@utils/locations';
-import { palette, shadow } from '@theme/colors';
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useRouter } from "expo-router";
+import Svg, { Path, Circle } from "react-native-svg";
+import { DeliveryMark3D } from "@components/brand/DeliveryMark3D";
+import { useBrandMotion } from "@components/brand/useBrandMotion";
+import {
+  DELIVERY_LOGIN_MARK_SIZE,
+  DELIVERY_LOGIN_STAGE_HEIGHT,
+  DELIVERY_LOGIN_TOP_PADDING,
+} from "@components/brand/layout";
+import { login } from "@services/auth";
+import { useAuthStore } from "@store/useAuthStore";
+import { showToast } from "@store/useToastStore";
+import { accessibleLocations } from "@utils/locations";
+import { palette, shadow } from "@theme/colors";
 
 const c = palette.dark;
 
@@ -22,36 +38,85 @@ const c = palette.dark;
 type I = { color: string; size?: number };
 const IcUser = ({ color, size = 20 }: I) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path
+      d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 );
 const IcLock = ({ color, size = 20 }: I) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm2 0V7a5 5 0 0 1 10 0v4" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path
+      d="M5 11h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Zm2 0V7a5 5 0 0 1 10 0v4"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 );
-const IcEye = ({ color, size = 20, off }: I & { off?: boolean }) => off ? (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.4 5.2A9.5 9.5 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.1 6.1A17 17 0 0 0 2 12s3.5 7 10 7a9.3 9.3 0 0 0 2.6-.4" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-) : (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={1.8} />
-  </Svg>
-);
+const IcEye = ({ color, size = 20, off }: I & { off?: boolean }) =>
+  off ? (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.4 5.2A9.5 9.5 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.1 6.1A17 17 0 0 0 2 12s3.5 7 10 7a9.3 9.3 0 0 0 2.6-.4"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  ) : (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={12} r={3} stroke={color} strokeWidth={1.8} />
+    </Svg>
+  );
 const IcArrow = ({ color, size = 20 }: I) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M5 12h14M13 6l6 6-6 6" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+    <Path
+      d="M5 12h14M13 6l6 6-6 6"
+      stroke={color}
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 );
 
 /** Motivo: ruta punteada con pines (identidad delivery). */
 const RouteMotif = () => (
   <Svg width={220} height={90} viewBox="0 0 220 90" fill="none">
-    <Path d="M14 70 C 60 30, 90 95, 140 50 S 200 18, 210 24" stroke="rgba(255,255,255,0.18)" strokeWidth={2.5} strokeDasharray="2 8" strokeLinecap="round" />
-    {[{ x: 14, y: 70 }, { x: 140, y: 50 }, { x: 210, y: 24 }].map((p, i) => (
-      <Circle key={i} cx={p.x} cy={p.y} r={6} fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} />
+    <Path
+      d="M14 70 C 60 30, 90 95, 140 50 S 200 18, 210 24"
+      stroke="rgba(255,255,255,0.18)"
+      strokeWidth={2.5}
+      strokeDasharray="2 8"
+      strokeLinecap="round"
+    />
+    {[
+      { x: 14, y: 70 },
+      { x: 140, y: 50 },
+      { x: 210, y: 24 },
+    ].map((p, i) => (
+      <Circle
+        key={i}
+        cx={p.x}
+        cy={p.y}
+        r={6}
+        fill="rgba(255,255,255,0.22)"
+        stroke="rgba(255,255,255,0.5)"
+        strokeWidth={1.5}
+      />
     ))}
   </Svg>
 );
@@ -62,38 +127,145 @@ const Hero = memo(function Hero() {
   const [focused, setFocused] = useState(false);
   const { foreground, reducedMotion } = useBrandMotion();
 
-  useFocusEffect(useCallback(() => {
-    setFocused(true);
-    return () => setFocused(false);
-  }, []));
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
 
   const animate = focused && foreground;
 
   return (
     <LinearGradient
       colors={[c.brandDeep, c.brandMid, c.primary]}
-      start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-      style={{ borderBottomLeftRadius: 38, borderBottomRightRadius: 38, overflow: 'hidden' }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{
+        borderBottomLeftRadius: 38,
+        borderBottomRightRadius: 38,
+        overflow: "hidden",
+      }}
     >
       {/* anillos / formas decorativas */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: -90, right: -70, width: 240, height: 240, borderRadius: 120, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.16)' }} />
-      <View pointerEvents="none" style={{ position: 'absolute', top: -40, right: -20, width: 150, height: 150, borderRadius: 75, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.12)' }} />
-      <View pointerEvents="none" style={{ position: 'absolute', bottom: -60, left: -50, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.07)' }} />
-      <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 8 }}><RouteMotif /></View>
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: -90,
+          right: -70,
+          width: 240,
+          height: 240,
+          borderRadius: 120,
+          borderWidth: 1.5,
+          borderColor: "rgba(255,255,255,0.16)",
+        }}
+      />
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: -40,
+          right: -20,
+          width: 150,
+          height: 150,
+          borderRadius: 75,
+          borderWidth: 1.5,
+          borderColor: "rgba(255,255,255,0.12)",
+        }}
+      />
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          bottom: -60,
+          left: -50,
+          width: 180,
+          height: 180,
+          borderRadius: 90,
+          backgroundColor: "rgba(255,255,255,0.07)",
+        }}
+      />
+      <View
+        pointerEvents="none"
+        style={{ position: "absolute", bottom: 0, left: 8 }}
+      >
+        <RouteMotif />
+      </View>
 
-      <SafeAreaView edges={['top']}>
-        <View style={{ alignItems: 'center', paddingTop: DELIVERY_LOGIN_TOP_PADDING, paddingBottom: 32, paddingHorizontal: 24 }}>
-          <View style={{ height: DELIVERY_LOGIN_STAGE_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
-            <DeliveryMark3D size={DELIVERY_LOGIN_MARK_SIZE} animated={animate} reducedMotion={reducedMotion} />
+      <SafeAreaView edges={["top"]}>
+        <View
+          style={{
+            alignItems: "center",
+            paddingTop: DELIVERY_LOGIN_TOP_PADDING,
+            paddingBottom: 32,
+            paddingHorizontal: 24,
+          }}
+        >
+          <View
+            style={{
+              height: DELIVERY_LOGIN_STAGE_HEIGHT,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <DeliveryMark3D
+              size={DELIVERY_LOGIN_MARK_SIZE}
+              animated={animate}
+              reducedMotion={reducedMotion}
+            />
           </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 18 }}>
-            <Text style={{ color: '#fff', fontSize: 27, fontWeight: '900', letterSpacing: -0.7 }}>Comand</Text>
-            <Text style={{ color: '#FFE3C7', fontSize: 27, fontWeight: '900', letterSpacing: -0.7 }}>POS</Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "baseline",
+              marginTop: 18,
+            }}
+          >
+            <Text
+              style={{
+                color: "#fff",
+                fontSize: 27,
+                fontWeight: "900",
+                letterSpacing: -0.7,
+              }}
+            >
+              Comand
+            </Text>
+            <Text
+              style={{
+                color: "#FFE3C7",
+                fontSize: 27,
+                fontWeight: "900",
+                letterSpacing: -0.7,
+              }}
+            >
+              POS
+            </Text>
           </View>
 
-          <View style={{ marginTop: 8, paddingHorizontal: 13, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' }}>
-            <Text style={{ color: '#FFF3E8', fontSize: 11, fontWeight: '900', letterSpacing: 3 }}>DELIVERY</Text>
+          <View
+            style={{
+              marginTop: 8,
+              paddingHorizontal: 13,
+              paddingVertical: 4,
+              borderRadius: 999,
+              backgroundColor: "rgba(255,255,255,0.18)",
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.24)",
+            }}
+          >
+            <Text
+              style={{
+                color: "#FFF3E8",
+                fontSize: 11,
+                fontWeight: "900",
+                letterSpacing: 3,
+              }}
+            >
+              DELIVERY
+            </Text>
           </View>
         </View>
       </SafeAreaView>
@@ -112,9 +284,16 @@ type FieldProps = {
   icon: (active: boolean) => React.ReactNode;
   secureToggle?: boolean;
   fieldRef?: Ref<TextInput>;
-} & Omit<TextInputProps, 'style'>;
+} & Omit<TextInputProps, "style">;
 
-const Field = memo(function Field({ label, marginTop, icon, secureToggle, fieldRef, ...inputProps }: FieldProps) {
+const Field = memo(function Field({
+  label,
+  marginTop,
+  icon,
+  secureToggle,
+  fieldRef,
+  ...inputProps
+}: FieldProps) {
   // Sin estado en foco: setState dentro de onFocus re-renderiza y tira el foco
   // en esta versión de RN/Nueva Arquitectura. Borde estático.
   return (
@@ -143,17 +322,19 @@ export default function LoginScreen() {
   const { setAuth, setLocationId } = useAuthStore();
   const [loading, setLoading] = useState(false);
 
-
   // Valores NO controlados: se guardan en refs, no en estado → no re-render al escribir.
-  const userRef = useRef('');
-  const passRef = useRef('');
+  const userRef = useRef("");
+  const passRef = useRef("");
   const passInputRef = useRef<TextInput>(null);
 
   const onSubmit = async () => {
     const username = userRef.current.trim();
     const password = passRef.current;
     if (!username || !password) {
-      showToast({ message: 'Ingresá usuario y contraseña', variant: 'warning' });
+      showToast({
+        message: "Ingresa usuario y contraseña",
+        variant: "warning",
+      });
       return;
     }
     Keyboard.dismiss();
@@ -165,9 +346,9 @@ export default function LoginScreen() {
       const locs = accessibleLocations(res.user);
       if (locs.length <= 1) {
         setLocationId(locs[0]?.id ?? null);
-        router.replace('/(tabs)/orders');
+        router.replace("/(tabs)/orders");
       } else {
-        router.replace('/select-location');
+        router.replace("/select-location");
       }
     } catch {
       /* interceptor */
@@ -183,65 +364,138 @@ export default function LoginScreen() {
           iPhone SE) el contenido excede el alto y se recortaba abajo (rechazo
           App Review, Guideline 4). */}
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 16 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: insets.bottom + 16,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-          {/* ───────── HERO ───────── */}
-          <Hero />
+        {/* ───────── HERO ───────── */}
+        <Hero />
 
-          {/* ───────── FORM ───────── */}
-          <View style={{ paddingHorizontal: 24, marginTop: 28 }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: c.text }}>Hola, motorizado 👋</Text>
-            <Text style={{ fontSize: 14, color: c.textDim, marginTop: 4 }}>Entrá para ver tus entregas del día.</Text>
+        {/* ───────── FORM ───────── */}
+        <View style={{ paddingHorizontal: 24, marginTop: 28 }}>
+          <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>
+            Hola, motorizado 👋
+          </Text>
+          <Text style={{ fontSize: 14, color: c.textDim, marginTop: 4 }}>
+            Entra para ver tus entregas del día.
+          </Text>
 
-            <Field
-              label="Usuario"
-              marginTop={24}
-              icon={(a) => <IcUser color={a ? c.primary : c.textMuted} />}
-              onChangeText={(t) => { userRef.current = t; }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="tu usuario"
-              returnKeyType="next"
-              onSubmitEditing={() => passInputRef.current?.focus()}
-              blurOnSubmit={false}
-            />
+          <Field
+            label="Usuario"
+            marginTop={24}
+            icon={(a) => <IcUser color={a ? c.primary : c.textMuted} />}
+            onChangeText={(t) => {
+              userRef.current = t;
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="tu usuario"
+            returnKeyType="next"
+            onSubmitEditing={() => passInputRef.current?.focus()}
+            blurOnSubmit={false}
+          />
 
-            <Field
-              label="Contraseña"
-              marginTop={16}
-              icon={(a) => <IcLock color={a ? c.primary : c.textMuted} />}
-              fieldRef={passInputRef}
-              secureToggle
-              onChangeText={(t) => { passRef.current = t; }}
-              placeholder="••••••"
-              returnKeyType="go"
-              onSubmitEditing={onSubmit}
-            />
+          <Field
+            label="Contraseña"
+            marginTop={16}
+            icon={(a) => <IcLock color={a ? c.primary : c.textMuted} />}
+            fieldRef={passInputRef}
+            secureToggle
+            onChangeText={(t) => {
+              passRef.current = t;
+            }}
+            placeholder="••••••"
+            returnKeyType="go"
+            onSubmitEditing={onSubmit}
+          />
 
-            <Pressable onPress={onSubmit} disabled={loading} style={({ pressed }) => [st.cta, shadow.lg, { shadowColor: c.primary, opacity: pressed || loading ? 0.92 : 1 }]}>
-              {loading ? <ActivityIndicator color="#fff" /> : (
-                <>
-                  <Text style={st.ctaTxt}>Entrar</Text>
-                  <IcArrow color="#fff" />
-                </>
-              )}
-            </Pressable>
+          <Pressable
+            onPress={onSubmit}
+            disabled={loading}
+            style={({ pressed }) => [
+              st.cta,
+              shadow.lg,
+              {
+                shadowColor: c.primary,
+                opacity: pressed || loading ? 0.92 : 1,
+              },
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Text style={st.ctaTxt}>Entrar</Text>
+                <IcArrow color="#fff" />
+              </>
+            )}
+          </Pressable>
 
-            <Text style={{ textAlign: 'center', color: c.textMuted, fontSize: 12, marginTop: 28 }}>
-              ComandPOS · Delivery
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ayuda para acceder"
+            onPress={() =>
+              Alert.alert(
+                "Ayuda para acceder",
+                "Solicita a tu administrador que restablezca tu contraseña o revise que tu perfil de repartidor esté activo en la sucursal.",
+              )
+            }
+            style={{ minHeight: 48, justifyContent: "center", marginTop: 12 }}
+          >
+            <Text
+              style={{ textAlign: "center", color: c.textDim, fontSize: 14 }}
+            >
+              ¿Necesitas ayuda para entrar?
             </Text>
-          </View>
+          </Pressable>
+          <Text
+            style={{
+              textAlign: "center",
+              color: c.textMuted,
+              fontSize: 12,
+              marginTop: 28,
+            }}
+          >
+            ComandPOS · Delivery
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 const st = {
-  label: { fontSize: 12, fontWeight: '700' as const, color: c.textDim, textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 7 },
-  field: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, backgroundColor: c.surface, borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 16 : 8 },
+  label: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: c.textDim,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    marginBottom: 7,
+  },
+  field: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    backgroundColor: c.surface,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 16 : 8,
+  },
   input: { flex: 1, fontSize: 16, color: c.text, padding: 0, margin: 0 },
-  cta: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 8, backgroundColor: c.primary, borderRadius: 14, height: 56, marginTop: 26 },
-  ctaTxt: { color: '#fff', fontSize: 17, fontWeight: '800' as const },
+  cta: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+    backgroundColor: c.primary,
+    borderRadius: 14,
+    height: 56,
+    marginTop: 26,
+  },
+  ctaTxt: { color: "#fff", fontSize: 17, fontWeight: "800" as const },
 };

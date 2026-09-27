@@ -31,7 +31,7 @@ import {
   OrderCard,
 } from "@components/ui/DeliveryUI";
 import { hasCoordinates, isActive, customerName } from "@utils/delivery";
-import { nearbyOrder, type Point } from "@utils/route";
+import { nearbyOrder, oldestFirst, type Point } from "@utils/route";
 import { navigateOrder } from "@utils/contact";
 import { palette } from "@theme/colors";
 import { IconAction, RouteArt } from "@components/ui/DeliveryDesign";
@@ -107,6 +107,7 @@ export default function MapScreen() {
   const [locationAttempt, setLocationAttempt] = useState(0);
   const [road, setRoad] = useState<DrivingRoute | null>(null);
   const [roadLoading, setRoadLoading] = useState(false);
+  const [routeStrategy, setRouteStrategy] = useState("roads");
   const [busy, setBusy] = useState(false);
   const [focused, setFocused] = useState(false);
   const mapRef = useRef<MapWebHandle>(null);
@@ -185,24 +186,41 @@ export default function MapScreen() {
       latitude: Number(o.delivery_lat),
       longitude: Number(o.delivery_lng),
     }));
-    if (!focused || !business.googleMapsApiKey || !me || !stops.length) {
+    if (
+      !focused ||
+      !business.config?.directions_available ||
+      !me ||
+      !stops.length
+    ) {
       setRoadLoading(false);
       return;
     }
     setRoadLoading(true);
     fetchDrivingRoute(
-      business.googleMapsApiKey,
       { latitude: me.lat, longitude: me.lng },
-      stops,
+      active.filter(hasCoordinates).map((o) => o.id),
       abort.signal,
-    ).then((result) => {
-      if (!abort.signal.aborted) {
-        setRoad(result);
-        setRoadLoading(false);
-      }
-    });
+    )
+      .then((result) => {
+        if (!abort.signal.aborted) {
+          setRoad(result);
+          setRoadLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) {
+          setRoad(null);
+          setRoadLoading(false);
+        }
+      });
     return () => abort.abort();
-  }, [business.googleMapsApiKey, me?.lat, me?.lng, coordsKey, focused]);
+  }, [
+    business.config?.directions_available,
+    me ? Math.round(me.lat * 300) : null,
+    me ? Math.round(me.lng * 300) : null,
+    coordsKey,
+    focused,
+  ]);
   const scene: MapScene = useMemo(
     () => ({
       center: me ?? {
@@ -267,7 +285,23 @@ export default function MapScreen() {
       });
     setBusy(true);
     try {
-      const ordered = nearbyOrder(me, active);
+      let ordered =
+        routeStrategy === "oldest"
+          ? oldestFirst(active)
+          : nearbyOrder(me, active);
+      let optimized: DrivingRoute | null = null;
+      if (business.config?.directions_available) {
+        optimized = await fetchDrivingRoute(
+          { latitude: me.lat, longitude: me.lng },
+          ordered.map((o) => o.id),
+          undefined,
+          routeStrategy === "roads",
+        );
+        if (optimized)
+          ordered = optimized.accountIds.map((id) =>
+            active.find((o) => o.id === id)!,
+          );
+      }
       let id = route?.id;
       if (!id) id = (await groupMine(ordered.map((o) => o.id)))?.data?.route_id;
       if (!id) throw new Error("No se confirmó la creación del viaje.");
@@ -276,11 +310,22 @@ export default function MapScreen() {
       await optimizeRoute(
         id,
         stops.map((o, i) => ({ account_id: o.id, order: i + 1 })),
+        optimized
+          ? {
+              total_distance_km: optimized.distanceKm,
+              total_duration_seconds: Math.round(optimized.durationSec),
+            }
+          : undefined,
       );
       await qc.invalidateQueries({ queryKey: sessionKey(currentScope()) });
       setSelectedRoute(String(id));
       showToast({
-        message: "Orden de paradas guardado por cercanía.",
+        message:
+          routeStrategy === "oldest"
+            ? "Paradas guardadas por antigüedad."
+            : optimized
+              ? "Paradas ordenadas por recorrido en calles."
+              : "Paradas ordenadas por cercanía estimada.",
         variant: "success",
       });
     } catch (e: any) {
@@ -521,9 +566,19 @@ export default function MapScreen() {
                       : "El trazo une las ubicaciones; el recorrido por calles no está disponible."}
                   </Text>
                   {active.length > 1 && (
+                    <Chips
+                      value={routeStrategy}
+                      onChange={setRouteStrategy}
+                      items={[
+                        { id: "roads", label: "Por recorrido" },
+                        { id: "oldest", label: "Más antiguos primero" },
+                      ]}
+                    />
+                  )}
+                  {active.length > 1 && (
                     <Button
                       secondary
-                      label="Ordenar por cercanía"
+                      label="Guardar orden de paradas"
                       busy={busy}
                       disabled={
                         !query.compatible ||
