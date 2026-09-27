@@ -16,22 +16,23 @@ El envío del binario no significa aprobación de App Review ni publicación pú
 ## Android
 
 - Version code 7: FINISHED.
-- Canal de destino: alpha.
+- Canal de destino: alpha (prueba cerrada).
 - [Build](https://expo.dev/accounts/gabrielrodz3o/projects/comandpos-delivery/builds/e097f813-f23e-4d25-901a-3125f82d596e)
-- [Envío rechazado](https://expo.dev/accounts/gabrielrodz3o/projects/comandpos-delivery/submissions/5a7bb18d-356f-40d0-9f18-8e4768a3137f)
-- Error: SUBMISSION_SERVICE_ANDROID_SERVICE_ACCOUNT_IS_MISSING_PERMISSIONS.
 
-Se vinculó la credencial de publicación ya existente en EAS:
-`eas-submit-movil@comandpos-play-submit.iam.gserviceaccount.com`.
-Google Play rechazó el envío por permisos insuficientes sobre esta app.
-La credencial de Firebase para notificaciones no se modificó.
+### Historial de envíos (27-sep)
 
-Un administrador debe conceder a esa cuenta acceso a `com.comandpos.delivery`
-y permisos de publicación en el canal de pruebas elegido, o proporcionar otra
-cuenta de servicio autorizada. Después, reenviar el mismo build sin recompilar:
+| Envío | Resultado | Causa |
+| --- | --- | --- |
+| 5a7bb18d, 88c3765f | `SERVICE_ACCOUNT_IS_MISSING_PERMISSIONS` | La cuenta de servicio `eas-submit-movil@comandpos-play-submit.iam.gserviceaccount.com` solo tenía permisos sobre Comand POS Móvil. Se le agregó ComandPOS Delivery (ver info, lanzar a pruebas, lanzar a producción). |
+| 4132b335 | `Release artifacts require permissions that are missing from permission declaration` | La 1.0.3 declara `ACCESS_BACKGROUND_LOCATION` y `FOREGROUND_SERVICE_LOCATION` (rastreo del viaje activo) y la ficha no tiene las declaraciones de política correspondientes. |
+| [95fe3eb6](https://expo.dev/accounts/gabrielrodz3o/projects/comandpos-delivery/submissions/95fe3eb6-5853-42e9-afc3-62905583de00) | **FINISHED** (release en borrador) | `eas.json` → `releaseStatus: draft` + `changesNotSentForReview: true`. Play acepta el artefacto sin revisión y habilita los formularios. |
 
-```sh
-eas submit --platform android --profile production --id e097f813-f23e-4d25-901a-3125f82d596e --non-interactive
-```
+### Pendiente para que llegue a los verificadores
 
-No se desplegó la matriz durante esta tarea.
+1. Play Console → Contenido de la app → completar **Permisos de ubicación** (segundo plano) y
+   **Permisos de servicio en primer plano** (tipo `location`). Ambas piden justificación y un
+   video demo. Base para el texto: el repartidor comparte posición con despacho solo durante un
+   viaje activo (cada 30 s / 100 m, `Accuracy.Balanced`), con notificación persistente
+   "ComandPOS · Viaje activo"; se detiene al cerrar el viaje y es opcional desde Cuenta.
+2. Promover el borrador de alpha a lanzamiento desde la consola.
+3. Producción sigue bloqueada por Google: 1 de 12 verificadores y 0 de 14 días.
