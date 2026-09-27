@@ -18,7 +18,10 @@
       "bundleIdentifier": "com.comandpos.delivery",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Usamos tu ubicación para calcular la ruta y el origen de tus entregas.",
-        "UIBackgroundModes": ["remote-notification", "location"],
+        "UIBackgroundModes": [
+          "remote-notification",
+          "location"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Con tu autorización, compartimos ubicación con despacho únicamente durante un viaje activo, incluso con la app en segundo plano."
       }
@@ -64,8 +67,8 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
           }
         }
       ],
