@@ -64,8 +64,12 @@ Notas: el dominio `gcoderd.com` ya tiene MX de Cloudflare Email Routing, así qu
 - Formulario dejado **completo** con los datos de este expediente (región DO, razón social,
   dirección, provincia "Dominican Rep. reg.", CP 51000, teléfono +1 849-540-6093, contacto
   Gabriel Rodríguez Rodríguez, correo `play@gcoderd.com`).
-- **Pendiente del titular**: (1) crear `play@gcoderd.com` en Cloudflare Email Routing ANTES de
-  enviar, porque D&B responde a ese correo; (2) escribir el CAPTCHA y pulsar *Continue*.
+- **Solicitud enviada el 2026-09-30** (Apple: "Your information is being processed. You will soon
+  receive a confirmation email from Dun & Bradstreet"). D&B escribirá a `play@gcoderd.com`.
+- `play@gcoderd.com` **creado y activo** en Cloudflare Email Routing (regla → gcoderd@gmail.com);
+  revisar ese Gmail, incluido spam, para el correo de D&B (puede pedir confirmar la solicitud).
+- Redirección `www.gcoderd.com` → `gcoderd.com`: **pendiente del titular** (Cloudflare → gcoderd.com
+  → Reglas → plantilla "Redirigir de WWW a raíz" → Crear a partir de plantilla → Implementar).
 
 ## Cuándo se paga
 
