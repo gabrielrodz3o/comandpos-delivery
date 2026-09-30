@@ -13,6 +13,15 @@ y después Android. TypeScript y las 38 pruebas locales pasaron.
 
 El envío del binario no significa aprobación de App Review ni publicación pública.
 
+### App Review (2026-09-30)
+
+- 1.0.2 (build 6) fue **aprobada** y está "Ready for Distribution".
+- Versión **1.0.3** creada en App Store Connect con el build 7, novedades en español y notas al
+  revisor ampliadas (justificación de ubicación en segundo plano durante el viaje activo y de la
+  cámara para la constancia de entrega). Cuenta demo de revisión sin cambios.
+- **Enviada a revisión**: estado "Waiting for Review" (hasta 48 h). Lanzamiento automático al
+  aprobarse.
+
 ## Android
 
 - Version code 7: FINISHED (target API 35; sustituido por el 8).
