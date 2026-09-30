@@ -53,6 +53,20 @@ Notas: el dominio `gcoderd.com` ya tiene MX de Cloudflare Email Routing, así qu
 7. Volver a dar permisos a la cuenta de servicio de EAS en la cuenta nueva y actualizar el
    Firebase/Google Services si aplica.
 
+## Estado del D-U-N-S (2026-09-30)
+
+- El buscador de D&B (my.dnb.com) solo cubre empresas de EE. UU.; CIAL D&B (LatAm) no publica
+  formulario directo.
+- Vía usada: **Apple Developer → Enroll → Look up your D-U-N-S Number**
+  (https://developer.apple.com/enroll/duns-lookup/). Busca en D&B y, si no existe, envía la
+  solicitud gratuita; D&B responde por correo (Apple indica ~5 días hábiles). El número sirve
+  igual para Google Play.
+- Formulario dejado **completo** con los datos de este expediente (región DO, razón social,
+  dirección, provincia "Dominican Rep. reg.", CP 51000, teléfono +1 849-540-6093, contacto
+  Gabriel Rodríguez Rodríguez, correo `play@gcoderd.com`).
+- **Pendiente del titular**: (1) crear `play@gcoderd.com` en Cloudflare Email Routing ANTES de
+  enviar, porque D&B responde a ese correo; (2) escribir el CAPTCHA y pulsar *Continue*.
+
 ## Cuándo se paga
 
 Solo en el paso 5, al final del alta de la cuenta de organización en Play Console, y solo
